@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: EasyFishing: Forever
+## Notes: Why tank when you can fish? Sit back, alt-tab, and let EasyFishing handle the bobber. Your one-stop utility for the ultimate endless fishing grind.
+## Author: Meshoot Youtank
+## Version: 0.1.0
+## IconTexture: Interface\AddOns\EasyFishing\EasyFishing.tga
+## SavedVariables: EasyFishingDB
+
+EasyFishing.lua
