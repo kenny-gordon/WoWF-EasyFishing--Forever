@@ -27,7 +27,7 @@ The optional watcher shows Fishing skill, time fishing, casts, skill gains, item
 The Locations tab records fish caught by zone, area, approximate map coordinates, and broad server-time ranges. Filter by zone; expand an area to see its recorded locations, then select one to set a map waypoint. Catches within 15 yards are combined into one location. This is a personal catch history, not a prefilled habitat list or a verified map of fishing-pool boundaries.
 
 ### 📖 Forever Fishing Guide
-The Guide tab highlights your current Fishing rank, shows rank-by-rank training advice, and includes a searchable, faction-filtered trainer directory. The lure list uses in-game item icons to show lure bonuses, skill requirements, and how many you carry. The campsite section explains Fish Bowl, Fishing Rack, and Fishing Hut requirements and effects. Each needs a nearby campfire and shares a one-hour cooldown; Rack and Hut also provide the Fish Bowl bonus. The 225-300 leveling route is marked as undocumented in the source guide.
+The Guide has Training, Fishing NPCs, and Gear & Rewards views. It highlights your current rank, searches 25 fishing NPCs by name, role, faction, town, or zone, and lists fishing poles, gear bonuses, Find Fish, and notable quest rewards. Lure and campsite items use in-game icons and show bag counts; campsite tooltips include recipe materials and effects. The 225-300 leveling route is marked as undocumented in the source guide.
 
 ### 🎒 Fishing Outfit
 Choose a saved Equipment Manager set for fishing, equip it, then restore the previous saved set. Outfit switching is manual and unavailable in combat. The current gear must match a saved set so EasyFishing can restore it safely.

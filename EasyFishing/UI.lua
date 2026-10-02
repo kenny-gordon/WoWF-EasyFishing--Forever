@@ -53,6 +53,14 @@ local function GetItemTexture(itemID)
     return icon
 end
 
+local function GetSpellIcon(spellID)
+    if C_Spell and C_Spell.GetSpellTexture then
+        return C_Spell.GetSpellTexture(spellID)
+    elseif type(GetSpellTexture) == "function" then
+        return GetSpellTexture(spellID)
+    end
+end
+
 local function ShareLastFish()
     local stats = EF.EnsureFishingStats()
     if not stats.lastCatchItemLink then
@@ -980,7 +988,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local guideTrainersTab = CreateFrame("Button", nil, guidePage, "UIPanelButtonTemplate")
         guideTrainersTab:SetSize(128, 22)
         guideTrainersTab:SetPoint("LEFT", guideTrainingTab, "RIGHT", 6, 0)
-        guideTrainersTab:SetText("Trainer Directory")
+        guideTrainersTab:SetText("Fishing NPCs")
+
+        local guideGearTab = CreateFrame("Button", nil, guidePage, "UIPanelButtonTemplate")
+        guideGearTab:SetSize(132, 22)
+        guideGearTab:SetPoint("LEFT", guideTrainersTab, "RIGHT", 6, 0)
+        guideGearTab:SetText("Gear & Rewards")
 
         local guideTrainingIndicator = guidePage:CreateTexture(nil, "ARTWORK")
         guideTrainingIndicator:SetColorTexture(1, 0.82, 0, 0.9)
@@ -993,6 +1006,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         guideTrainersIndicator:SetPoint("BOTTOMLEFT", guideTrainersTab, "BOTTOMLEFT", 6, 2)
         guideTrainersIndicator:Hide()
 
+        local guideGearIndicator = guidePage:CreateTexture(nil, "ARTWORK")
+        guideGearIndicator:SetColorTexture(1, 0.82, 0, 0.9)
+        guideGearIndicator:SetSize(120, 2)
+        guideGearIndicator:SetPoint("BOTTOMLEFT", guideGearTab, "BOTTOMLEFT", 6, 2)
+        guideGearIndicator:Hide()
+
         local guideTrainingView = CreateFrame("Frame", nil, guidePage)
         guideTrainingView:SetPoint("TOPLEFT", guideTrainingTab, "BOTTOMLEFT", 0, -10)
         guideTrainingView:SetSize(PAGE_CONTENT_WIDTH, 380)
@@ -1000,6 +1019,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local guideTrainersView = CreateFrame("Frame", nil, guidePage)
         guideTrainersView:SetAllPoints(guideTrainingView)
         guideTrainersView:Hide()
+
+        local guideGearView = CreateFrame("Frame", nil, guidePage)
+        guideGearView:SetAllPoints(guideTrainingView)
+        guideGearView:Hide()
 
         local trainingTitle = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainingTitle:SetPoint("TOPLEFT", guideTrainingView, "TOPLEFT", 0, 0)
@@ -1134,6 +1157,138 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             campRows[index] = row
         end
 
+        local gearTitle = guideGearView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        gearTitle:SetPoint("TOPLEFT", guideGearView, "TOPLEFT", 0, 0)
+        gearTitle:SetTextColor(1, 0.82, 0)
+        gearTitle:SetText("Fishing Skill Bonuses")
+
+        local gearRows = {}
+        for index, boost in ipairs(EF.Data.FISHING_BOOSTS) do
+            local row = CreateFrame("Frame", nil, guideGearView)
+            row.boost = boost
+            row:SetSize(300, 34)
+            row:SetPoint("TOPLEFT", gearTitle, "BOTTOMLEFT", 0, -8 - ((index - 1) * 36))
+            row:EnableMouse(true)
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(24, 24)
+            row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
+            local icon = boost.iconType == "spell"
+                and GetSpellIcon(boost.id) or GetItemTexture(boost.id)
+            row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, 0)
+            row.name:SetWidth(175)
+            row.name:SetJustifyH("LEFT")
+            row.name:SetText(boost.name)
+
+            row.bonus = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.bonus:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+            row.bonus:SetWidth(82)
+            row.bonus:SetJustifyH("RIGHT")
+            row.bonus:SetText(string.format("+%d Fishing", boost.bonus))
+            row.bonus:SetTextColor(1, 0.82, 0)
+
+            row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+            row.detail:SetWidth(245)
+            row.detail:SetJustifyH("LEFT")
+            row.detail:SetText(string.format("Skill %d+  |  %s", boost.minimumSkill, boost.source))
+
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(boost.name)
+                GameTooltip:AddLine(string.format("Adds %d Fishing skill", boost.bonus), 1, 1, 1)
+                GameTooltip:AddLine(string.format("Requires Fishing skill %d", boost.minimumSkill), 0.75, 0.75, 0.75)
+                GameTooltip:AddLine("Source: " .. boost.source, 0.75, 0.75, 0.75, true)
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            gearRows[index] = row
+        end
+
+        local rewardsTitle = guideGearView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        rewardsTitle:SetPoint("TOPLEFT", guideGearView, "TOPLEFT", 320, 0)
+        rewardsTitle:SetTextColor(1, 0.82, 0)
+        rewardsTitle:SetText("Find Fish and Quest Rewards")
+
+        local findFish = EF.Data.FISHING_ABILITIES[1]
+        local findFishRow = CreateFrame("Frame", nil, guideGearView)
+        findFishRow:SetSize(300, 42)
+        findFishRow:SetPoint("TOPLEFT", rewardsTitle, "BOTTOMLEFT", 0, -8)
+        findFishRow:EnableMouse(true)
+
+        local findFishIcon = findFishRow:CreateTexture(nil, "ARTWORK")
+        findFishIcon:SetSize(24, 24)
+        findFishIcon:SetPoint("TOPLEFT", findFishRow, "TOPLEFT", 0, -2)
+        findFishIcon:SetTexture(GetSpellIcon(findFish.id)
+            or "Interface\\Icons\\INV_Misc_QuestionMark")
+
+        local findFishName = findFishRow:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        findFishName:SetPoint("TOPLEFT", findFishIcon, "TOPRIGHT", 6, 0)
+        findFishName:SetText(findFish.name)
+
+        local findFishDetail = findFishRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        findFishDetail:SetPoint("TOPLEFT", findFishName, "BOTTOMLEFT", 0, -1)
+        findFishDetail:SetWidth(265)
+        findFishDetail:SetText("Shows nearby fishing pools on your minimap.")
+
+        findFishRow:SetScript("OnEnter", function()
+            GameTooltip:SetOwner(findFishRow, "ANCHOR_RIGHT")
+            GameTooltip:SetText(findFish.name)
+            GameTooltip:AddLine(findFish.details, 1, 1, 1, true)
+            GameTooltip:AddLine("Requires Fishing skill 1; 1.5-second cooldown.", 0.75, 0.75, 0.75)
+            GameTooltip:Show()
+        end)
+        findFishRow:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        local rewardScroll = CreateFrame("ScrollFrame", "EasyFishingQuestRewardsScroll",
+            guideGearView, "UIPanelScrollFrameTemplate")
+        rewardScroll:SetPoint("TOPLEFT", findFishRow, "BOTTOMLEFT", -2, -8)
+        rewardScroll:SetSize(300, 290)
+        local rewardContent = CreateFrame("Frame", nil, rewardScroll)
+        rewardContent:SetSize(280, #EF.Data.FISHING_QUEST_REWARDS * 46)
+        rewardScroll:SetScrollChild(rewardContent)
+
+        local rewardRows = {}
+        for index, quest in ipairs(EF.Data.FISHING_QUEST_REWARDS) do
+            local row = CreateFrame("Frame", nil, rewardContent)
+            row:SetSize(278, 42)
+            row:SetPoint("TOPLEFT", rewardContent, "TOPLEFT", 0, -((index - 1) * 46))
+            row:EnableMouse(true)
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(22, 22)
+            row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
+            row.icon:SetTexture(quest.rewardItemID and GetItemTexture(quest.rewardItemID)
+                or "Interface\\Icons\\INV_Misc_QuestionMark")
+
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
+            row.name:SetWidth(242)
+            row.name:SetJustifyH("LEFT")
+            row.name:SetWordWrap(false)
+            row.name:SetText(quest.name)
+
+            row.reward = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.reward:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+            row.reward:SetWidth(242)
+            row.reward:SetJustifyH("LEFT")
+            row.reward:SetWordWrap(false)
+            row.reward:SetText(quest.reward)
+
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(quest.name)
+                GameTooltip:AddLine(quest.details, 1, 1, 1, true)
+                GameTooltip:AddLine("Reward: " .. quest.reward, 0.75, 0.75, 0.75, true)
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            rewardRows[index] = row
+        end
+
         local trainerFilter = "All"
         local trainerIntro = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         trainerIntro:SetPoint("TOPLEFT", guideTrainersView, "TOPLEFT", 0, -4)
@@ -1154,7 +1309,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local trainerHeaderName = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderName:SetPoint("TOPLEFT", trainerSearch, "BOTTOMLEFT", 6, -10)
-        trainerHeaderName:SetText("Trainer")
+        trainerHeaderName:SetText("NPC / Role")
 
         local trainerHeaderSide = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderSide:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 171, 0)
@@ -1162,7 +1317,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local trainerHeaderLocation = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderLocation:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 247, 0)
-        trainerHeaderLocation:SetText("Location")
+        trainerHeaderLocation:SetText("Zone / Area")
 
         local trainerHeaderCoordinates = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderCoordinates:SetPoint("TOPRIGHT", trainerHeaderName, "TOPLEFT", 572, 0)
@@ -1178,7 +1333,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local trainerEmptyText = trainerContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         trainerEmptyText:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 10, -10)
-        trainerEmptyText:SetText("No trainers match. Try another search or faction.")
+        trainerEmptyText:SetText("No fishing NPCs match. Try another search or faction.")
         trainerEmptyText:Hide()
 
         local trainerRows = {}
@@ -1189,11 +1344,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             local trainers = {}
             local query = (trainerSearch:GetText() or ""):lower():match("^%s*(.-)%s*$") or ""
-            for _, trainer in ipairs(EF.Data.FISHING_TRAINERS) do
+            for _, trainer in ipairs(EF.Data.FISHING_NPCS) do
                 local matchesFaction = trainerFilter == "All" or trainer.side == trainerFilter
                     or (trainer.side == "Both" and trainerFilter ~= "Neutral")
-                local searchText = string.lower(string.format("%s %s %s %s",
-                    trainer.name, trainer.side, trainer.location, trainer.zone))
+                local searchText = string.lower(string.format("%s %s %s %s %s %d",
+                    trainer.name, trainer.role, trainer.side,
+                    trainer.location, trainer.zone, trainer.level))
                 if matchesFaction and (query == "" or string.find(searchText, query, 1, true)) then
                     table.insert(trainers, trainer)
                 end
@@ -1205,9 +1361,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 return first.zone < second.zone
             end)
 
-            trainerIntro:SetText(string.format("%d of %d trainers. Search by name, town, or zone.",
-                #trainers, #EF.Data.FISHING_TRAINERS))
-            trainerContent:SetHeight(math.max(30, #trainers * 30))
+            trainerIntro:SetText(string.format("%d of %d Fishing NPCs. Search by name, role, town, or zone.",
+                #trainers, #EF.Data.FISHING_NPCS))
+            trainerContent:SetHeight(math.max(40, #trainers * 40))
             if #trainers == 0 then
                 trainerEmptyText:Show()
             else
@@ -1220,15 +1376,21 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local row = trainerRows[index]
                 if not row then
                     row = CreateFrame("Frame", nil, trainerContent)
-                    row:SetSize(590, 28)
+                    row:SetSize(590, 38)
 
                     row.background = row:CreateTexture(nil, "BACKGROUND")
                     row.background:SetAllPoints(row)
 
                     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -7)
+                    row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -3)
                     row.name:SetWidth(165)
                     row.name:SetJustifyH("LEFT")
+
+                    row.role = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.role:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+                    row.role:SetWidth(165)
+                    row.role:SetJustifyH("LEFT")
+                    row.role:SetTextColor(0.72, 0.72, 0.72)
 
                     row.side = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.side:SetPoint("TOPLEFT", row, "TOPLEFT", 177, -7)
@@ -1248,9 +1410,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end
 
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 30))
+                row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 40))
                 row.background:SetColorTexture(0.55, 0.48, 0.3, index % 2 == 0 and 0.07 or 0.025)
                 row.name:SetText(trainer.name)
+                row.role:SetText(string.format("%s  |  Level %d", trainer.role, trainer.level))
                 row.side:SetText(trainer.side == "Both" and "Shared" or trainer.side)
                 if trainer.side == "Alliance" then
                     row.side:SetTextColor(0.45, 0.72, 1)
@@ -1260,7 +1423,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.side:SetTextColor(1, 0.82, 0)
                 end
                 row.location:SetText(trainer.location .. ", " .. trainer.zone)
-                row.coordinates:SetText(string.format("%.1f, %.1f", trainer.x, trainer.y))
+                row.coordinates:SetText(trainer.x and trainer.y
+                    and string.format("%.1f, %.1f", trainer.x, trainer.y) or "Not listed")
                 row:Show()
             end
         end
@@ -1373,32 +1537,62 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         end
 
-        local function SelectGuideView(showTrainers)
-            if showTrainers then
+        local function SelectGuideView(viewName)
+            local showTraining = viewName == "training"
+            local showTrainers = viewName == "npcs"
+            local showGear = viewName == "gear"
+
+            if showTraining then
+                guideTrainingView:Show()
+            else
                 guideTrainingView:Hide()
+            end
+            if showTrainers then
                 guideTrainersView:Show()
+            else
+                guideTrainersView:Hide()
+            end
+            if showGear then
+                guideGearView:Show()
+            else
+                guideGearView:Hide()
+            end
+
+            if showTrainers then
                 guideTrainingIndicator:Hide()
                 guideTrainersIndicator:Show()
+                guideGearIndicator:Hide()
                 guideTrainingTab:GetFontString():SetTextColor(1, 1, 1)
                 guideTrainersTab:GetFontString():SetTextColor(1, 0.82, 0)
+                guideGearTab:GetFontString():SetTextColor(1, 1, 1)
+            elseif showGear then
+                guideTrainingIndicator:Hide()
+                guideTrainersIndicator:Hide()
+                guideGearIndicator:Show()
+                guideTrainingTab:GetFontString():SetTextColor(1, 1, 1)
+                guideTrainersTab:GetFontString():SetTextColor(1, 1, 1)
+                guideGearTab:GetFontString():SetTextColor(1, 0.82, 0)
             else
-                guideTrainingView:Show()
-                guideTrainersView:Hide()
                 guideTrainingIndicator:Show()
                 guideTrainersIndicator:Hide()
+                guideGearIndicator:Hide()
                 guideTrainingTab:GetFontString():SetTextColor(1, 0.82, 0)
                 guideTrainersTab:GetFontString():SetTextColor(1, 1, 1)
+                guideGearTab:GetFontString():SetTextColor(1, 1, 1)
             end
         end
 
         guideTrainingTab:SetScript("OnClick", function()
-            SelectGuideView(false)
+            SelectGuideView("training")
         end)
         guideTrainersTab:SetScript("OnClick", function()
-            SelectGuideView(true)
+            SelectGuideView("npcs")
             RefreshTrainerList()
         end)
-        SelectGuideView(false)
+        guideGearTab:SetScript("OnClick", function()
+            SelectGuideView("gear")
+        end)
+        SelectGuideView("training")
         RefreshTrainerList()
 
         settingsTab:SetScript("OnClick", function()

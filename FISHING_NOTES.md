@@ -60,7 +60,7 @@ Apprentice and Journeyman trainers are listed in major cities and some towns nea
 | Neutral (Forever locations) | Baelann Swiftcurrent | Valanaar, Zephras Isle | 63.2, 75.6 |
 | Neutral (Forever locations) | Krix | Powderfuse Port, Riverglades | 79.2, 54.6 |
 
-The guide lists Myizz Luckycatch under both faction trainer lists. The three neutral locations are the Forever-specific trainer entries shown on the guide.
+The guide lists Myizz Luckycatch under both faction trainer lists. The three neutral locations are the Forever-specific trainer entries shown on the guide. Wowhead's Fishing skill NPC tab also includes fishermen who are not trainers; it lists Hunter Moore as a level 31 Fisherman in Hillsbrad Foothills but provides no coordinates.
 
 ## Artisan Quest
 
@@ -140,8 +140,8 @@ The guide lists these Fishing recipes for camp objects:
 | Recipe | Minimum skill to craft | Recipe source and reagents |
 |---|---:|---|
 | Fish Bowl | 20 | Trainer; Raw Brilliant Smallfish + Empty Vial |
-| Fishing Rack | 140 | Blueprint: Fishing Rack |
-| Fishing Hut | 300 | Blueprint: Fishing Hut |
+| Fishing Rack | 140 | Blueprint: Fishing Rack; 2 Simple Wood, Crystal Vial, 2 Raw Mithril Head Trout |
+| Fishing Hut | 300 | Blueprint: Fishing Hut; 5 Simple Wood, 2 Bolt of Runecloth, Seasonal Fish Steaks |
 
 These objects can be placed at campsites. The Wowhead camping guide documents their Fishing benefits as follows:
 
@@ -155,6 +155,7 @@ Camping is described as a new crafting system alongside professions. The guide s
 
 - [Wowhead: Fishing Profession Overview in Forever](https://www.wowhead.com/forever/guide/professions/fishing/overview-leveling) - guide sections include training, leveling, boosts, tournament, and recipes; updated 2026-09-29; labeled Patch 1.60.1.
 - [Wowhead: Fishing guide changelog](https://www.wowhead.com/forever/guide/changelog?id=34923) - linked from the guide; check for later edits.
+- [Wowhead: Fishing skill database](https://www.wowhead.com/forever/skill=356/fishing) - recipes, associated NPCs, spells, quests, and fishing gear; accessed 2026-10-02.
 - [Wowhead: Camping Overview in Forever](https://www.wowhead.com/forever/guide/camping-overview-unlock-rewards) - camping unlock and profession campsite effects; updated 2026-09-22; labeled Patch 1.60.1.
 - [Wowhead: Fish Bowl item](https://www.wowhead.com/forever/item=279967/fish-bowl) - item requirements, effect, cooldown, and recipe reagents; accessed 2026-10-02.
 - [Wowhead: Fishing Rack item](https://www.wowhead.com/forever/item=279965/fishing-rack) - use requirement, fishing effects, campfire requirement, and shared cooldown; accessed 2026-10-02.
