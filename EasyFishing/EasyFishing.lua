@@ -3,6 +3,8 @@ local MAX_DOUBLE_CLICK = 0.4
 local lastClickTime    = 0
 local pendingClearTimer = nil
 local clearBindingOnMouseUp = false
+local FISHING_LOOT_WINDOW = 60
+local FISHING_SESSION_IDLE = 120
 
 -- ---------------------------------------------------------------------------
 -- Saved variables
@@ -13,9 +15,12 @@ local DB_DEFAULTS = {
     enableAutoLure    = true,
     enableSound       = true,
     disableClickToMoveWhileFishing = false,
+    showFishWatcher = true,
     doubleClickDelay  = 0.4,
     doubleClickButton = "LeftButton", -- see BUTTON_OPTIONS below
     castClickMode     = "DoubleClick",
+    fishWatcherX      = 0,
+    fishWatcherY      = 160,
 }
 
 -- All mouse buttons we can bind to. `binding` is the WoW key name used by
@@ -74,7 +79,26 @@ local function IsFishingChannelActive()
     return UnitChannelInfo("player") == GetFishingSpellName()
 end
 
-local LURES = { 6529, 6530, 6811, 7307, 6532, 6533 }
+local LURES = {
+    { id = 6529, minimumSkill = 1 },
+    { id = 6530, minimumSkill = 50 },
+    { id = 6811, minimumSkill = 50 },
+    { id = 6532, minimumSkill = 100 },
+    { id = 7307, minimumSkill = 100 },
+    { id = 6533, minimumSkill = 100 },
+}
+
+local function GetFishingSkill()
+    if not GetNumSkillLines or not GetSkillLineInfo then return nil end
+
+    local fishingName = GetFishingSpellName()
+    for index = 1, GetNumSkillLines() do
+        local skillName, isHeader, _, rank = GetSkillLineInfo(index)
+        if not isHeader and skillName == fishingName and type(rank) == "number" then
+            return rank
+        end
+    end
+end
 
 local function GetItemCountWrapper(itemID)
     if C_Item and C_Item.GetItemCount then
@@ -87,10 +111,11 @@ end
 
 local function GetAvailableLures()
     local available = {}
-    for _, lureID in ipairs(LURES) do
-        local count = GetItemCountWrapper(lureID)
-        if count > 0 then
-            table.insert(available, { id = lureID, count = count })
+    local skill = GetFishingSkill() or 0
+    for _, lure in ipairs(LURES) do
+        local count = GetItemCountWrapper(lure.id)
+        if count > 0 and skill >= lure.minimumSkill then
+            table.insert(available, { id = lure.id, count = count })
         end
     end
     return available
@@ -239,6 +264,301 @@ end
 
 local isFishing = false
 
+local fishingSession = nil
+local fishingSessionEndTimer = nil
+local lastFishingCastTime = nil
+
+local fishWatcher = CreateFrame("Frame", "EasyFishingFishWatcher", UIParent, "BackdropTemplate")
+fishWatcher:SetSize(300, 82)
+fishWatcher:SetFrameStrata("MEDIUM")
+fishWatcher:SetClampedToScreen(true)
+fishWatcher:SetMovable(true)
+fishWatcher:EnableMouse(true)
+fishWatcher:RegisterForDrag("MiddleButton")
+fishWatcher:Hide()
+
+if fishWatcher.SetBackdrop then
+    fishWatcher:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    fishWatcher:SetBackdropColor(0, 0, 0, 0.8)
+    fishWatcher:SetBackdropBorderColor(0.45, 0.45, 0.45, 1)
+end
+
+local fishWatcherTitle = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+fishWatcherTitle:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 10, -8)
+fishWatcherTitle:SetWidth(280)
+fishWatcherTitle:SetJustifyH("LEFT")
+
+local fishWatcherSummary = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+fishWatcherSummary:SetPoint("TOPLEFT", fishWatcherTitle, "BOTTOMLEFT", 0, -4)
+fishWatcherSummary:SetWidth(280)
+fishWatcherSummary:SetJustifyH("LEFT")
+
+local fishWatcherLastCatch = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+fishWatcherLastCatch:SetPoint("TOPLEFT", fishWatcherSummary, "BOTTOMLEFT", 0, -3)
+fishWatcherLastCatch:SetWidth(280)
+fishWatcherLastCatch:SetJustifyH("LEFT")
+
+local fishWatcherBreakdown = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+fishWatcherBreakdown:SetPoint("TOPLEFT", fishWatcherLastCatch, "BOTTOMLEFT", 0, -3)
+fishWatcherBreakdown:SetWidth(280)
+fishWatcherBreakdown:SetJustifyH("LEFT")
+fishWatcherBreakdown:SetWordWrap(true)
+
+fishWatcher:SetScript("OnDragStart", function(self)
+    if not InCombatLockdown() then
+        self:StartMoving()
+    end
+end)
+fishWatcher:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    if not EasyFishingDB then return end
+
+    local centerX, centerY = self:GetCenter()
+    local parentX, parentY = UIParent:GetCenter()
+    EasyFishingDB.fishWatcherX = centerX - parentX
+    EasyFishingDB.fishWatcherY = centerY - parentY
+    self:ClearAllPoints()
+    self:SetPoint("CENTER", UIParent, "CENTER", EasyFishingDB.fishWatcherX, EasyFishingDB.fishWatcherY)
+end)
+fishWatcher:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP", 0, 5)
+    GameTooltip:SetText("Fishing Watcher")
+    GameTooltip:AddLine("Middle-click and drag to move", 1, 1, 1)
+    GameTooltip:Show()
+end)
+fishWatcher:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+local function EnsureFishingStats()
+    if type(EasyFishingDB.fishingStats) ~= "table" then
+        EasyFishingDB.fishingStats = {}
+    end
+    local stats = EasyFishingDB.fishingStats
+    stats.totalItems = tonumber(stats.totalItems) or 0
+    stats.totalSessions = tonumber(stats.totalSessions) or 0
+    stats.totalCasts = tonumber(stats.totalCasts) or 0
+    stats.totalFishingSeconds = tonumber(stats.totalFishingSeconds) or 0
+    stats.totalSkillUps = tonumber(stats.totalSkillUps) or 0
+    if type(stats.itemsByID) ~= "table" then
+        stats.itemsByID = {}
+    end
+    if type(stats.zones) ~= "table" then
+        stats.zones = {}
+    end
+    return stats
+end
+
+local function EnsureZoneFishingStats(stats, zoneName)
+    local zoneStats = stats.zones[zoneName]
+    if type(zoneStats) ~= "table" then
+        zoneStats = {}
+        stats.zones[zoneName] = zoneStats
+    end
+    zoneStats.totalItems = tonumber(zoneStats.totalItems) or 0
+    zoneStats.sessions = tonumber(zoneStats.sessions) or 0
+    zoneStats.casts = tonumber(zoneStats.casts) or 0
+    zoneStats.fishingSeconds = tonumber(zoneStats.fishingSeconds) or 0
+    zoneStats.skillUps = tonumber(zoneStats.skillUps) or 0
+    if type(zoneStats.itemsByID) ~= "table" then
+        zoneStats.itemsByID = {}
+    end
+    return zoneStats
+end
+
+local function FormatFishingTime(seconds)
+    local totalSeconds = math.max(0, math.floor(seconds))
+    local hours = math.floor(totalSeconds / 3600)
+    local minutes = math.floor((totalSeconds % 3600) / 60)
+    local remainingSeconds = totalSeconds % 60
+    return string.format("%02d:%02d:%02d", hours, minutes, remainingSeconds)
+end
+
+local function UpdateFishWatcher()
+    if not fishingSession or not EasyFishingDB or not EasyFishingDB.showFishWatcher then
+        fishWatcher:Hide()
+        return
+    end
+
+    local zoneName = GetRealZoneText() or fishingSession.zone
+    local stats = EnsureFishingStats()
+    local zoneStats = EnsureZoneFishingStats(stats, zoneName)
+    local zoneItems = zoneStats.totalItems
+    fishWatcherTitle:SetText("Fishing Watcher - " .. zoneName)
+    fishWatcherSummary:SetText(string.format(
+        "Time %s | Casts %d | Skill-ups %d\nSession items %d | All-time %d",
+        FormatFishingTime(GetTime() - fishingSession.startedAt),
+        fishingSession.casts, fishingSession.skillUps,
+        fishingSession.totalItems, zoneItems))
+    fishWatcherLastCatch:SetText("Last catch: " .. (fishingSession.lastCatch or "None yet"))
+    local sessionItems = {}
+    for _, item in pairs(fishingSession.itemsByID) do
+        table.insert(sessionItems, item)
+    end
+    table.sort(sessionItems, function(firstItem, secondItem)
+        if firstItem.count == secondItem.count then
+            return firstItem.name < secondItem.name
+        end
+        return firstItem.count > secondItem.count
+    end)
+    local catchSummary = {}
+    for index = 1, math.min(#sessionItems, 2) do
+        local item = sessionItems[index]
+        table.insert(catchSummary, string.format("%s x%d", item.name, item.count))
+    end
+    if #sessionItems > 2 then
+        table.insert(catchSummary, string.format("+%d more", #sessionItems - 2))
+    end
+    fishWatcherBreakdown:SetText("Items caught this session: " .. (#catchSummary > 0 and table.concat(catchSummary, ", ") or "None yet"))
+    fishWatcher:Show()
+end
+
+local function EndFishingSession()
+    if fishingSessionEndTimer then
+        fishingSessionEndTimer:Cancel()
+        fishingSessionEndTimer = nil
+    end
+    if fishingSession then
+        local endedAt = fishingSession.lastActivityAt or GetTime()
+        local duration = math.max(0, endedAt - fishingSession.startedAt)
+        local stats = EnsureFishingStats()
+        local zoneStats = EnsureZoneFishingStats(stats, fishingSession.zone)
+        stats.totalFishingSeconds = stats.totalFishingSeconds + duration
+        zoneStats.fishingSeconds = zoneStats.fishingSeconds + duration
+    end
+    fishingSession = nil
+    lastFishingCastTime = nil
+    fishWatcher:Hide()
+end
+
+local function StartFishingSession()
+    if fishingSessionEndTimer then
+        fishingSessionEndTimer:Cancel()
+        fishingSessionEndTimer = nil
+    end
+    if not fishingSession then
+        local stats = EnsureFishingStats()
+        local zoneName = GetRealZoneText() or "Unknown zone"
+        local zoneStats = EnsureZoneFishingStats(stats, zoneName)
+        stats.totalSessions = stats.totalSessions + 1
+        zoneStats.sessions = zoneStats.sessions + 1
+        fishingSession = {
+            startedAt = GetTime(),
+            zone = zoneName,
+            totalItems = 0,
+            lastCatch = nil,
+            itemsByID = {},
+            casts = 0,
+            skillUps = 0,
+            lastActivityAt = GetTime(),
+            lastSkill = GetFishingSkill(),
+        }
+    end
+    local castTime = GetTime()
+    local sessionZoneStats = EnsureZoneFishingStats(
+        EnsureFishingStats(), fishingSession.zone)
+    fishingSession.casts = fishingSession.casts + 1
+    fishingSession.lastActivityAt = castTime
+    sessionZoneStats.casts = sessionZoneStats.casts + 1
+    EnsureFishingStats().totalCasts = EnsureFishingStats().totalCasts + 1
+    lastFishingCastTime = castTime
+    UpdateFishWatcher()
+end
+
+local function UpdateFishingSkillUps()
+    if not fishingSession then return end
+    local currentSkill = GetFishingSkill()
+    local previousSkill = fishingSession.lastSkill
+    if not currentSkill then return end
+
+    fishingSession.lastSkill = currentSkill
+    if previousSkill and currentSkill > previousSkill then
+        local gained = currentSkill - previousSkill
+        fishingSession.skillUps = fishingSession.skillUps + gained
+        local stats = EnsureFishingStats()
+        local zoneStats = EnsureZoneFishingStats(stats, fishingSession.zone)
+        stats.totalSkillUps = stats.totalSkillUps + gained
+        zoneStats.skillUps = (tonumber(zoneStats.skillUps) or 0) + gained
+        UpdateFishWatcher()
+    end
+end
+
+local function ScheduleFishingSessionEnd()
+    if fishingSessionEndTimer then
+        fishingSessionEndTimer:Cancel()
+    end
+    fishingSessionEndTimer = C_Timer.NewTimer(FISHING_SESSION_IDLE, function()
+        fishingSessionEndTimer = nil
+        if not isFishing then
+            EndFishingSession()
+        end
+    end)
+end
+
+local function RecordFishingLoot()
+    if not fishingSession or not lastFishingCastTime
+        or GetTime() - lastFishingCastTime > FISHING_LOOT_WINDOW then
+        return
+    end
+
+    local stats = EnsureFishingStats()
+    local zoneName = GetRealZoneText() or "Unknown zone"
+    local zoneStats = EnsureZoneFishingStats(stats, zoneName)
+
+    for lootSlot = 1, GetNumLootItems() do
+        local itemLink = GetLootSlotLink(lootSlot)
+        local itemID = itemLink and tonumber(itemLink:match("|Hitem:(%d+)"))
+        if itemID then
+            local _, itemName, quantity = GetLootSlotInfo(lootSlot)
+            itemName = itemName or GetItemInfo(itemID) or ("Item " .. itemID)
+            quantity = tonumber(quantity) or 1
+
+            local itemKey = tostring(itemID)
+            local totalItem = stats.itemsByID[itemKey]
+            if type(totalItem) ~= "table" then
+                totalItem = { name = itemName, count = 0 }
+                stats.itemsByID[itemKey] = totalItem
+            end
+            totalItem.name = itemName
+            totalItem.count = (tonumber(totalItem.count) or 0) + quantity
+
+            local sessionItem = fishingSession.itemsByID[itemKey]
+            if type(sessionItem) ~= "table" then
+                sessionItem = { name = itemName, count = 0 }
+                fishingSession.itemsByID[itemKey] = sessionItem
+            end
+            sessionItem.name = itemName
+            sessionItem.count = sessionItem.count + quantity
+
+            local zoneItem = zoneStats.itemsByID[itemKey]
+            if type(zoneItem) ~= "table" then
+                zoneItem = { name = itemName, count = 0 }
+                zoneStats.itemsByID[itemKey] = zoneItem
+            end
+            zoneItem.name = itemName
+            zoneItem.count = (tonumber(zoneItem.count) or 0) + quantity
+
+            stats.totalItems = stats.totalItems + quantity
+            zoneStats.totalItems = zoneStats.totalItems + quantity
+            fishingSession.totalItems = fishingSession.totalItems + quantity
+            fishingSession.lastCatch = itemName
+        end
+    end
+
+    UpdateFishWatcher()
+end
+
+fishWatcher:SetScript("OnUpdate", function(self, elapsed)
+    self.updateElapsed = (self.updateElapsed or 0) + elapsed
+    if self.updateElapsed >= 1 then
+        self.updateElapsed = 0
+        UpdateFishWatcher()
+    end
+end)
+
 -- ---------------------------------------------------------------------------
 -- Main frame
 -- ---------------------------------------------------------------------------
@@ -252,6 +572,7 @@ mainFrame:RegisterEvent("PLAYER_LOGOUT")
 mainFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_LOGOUT" then
         RestoreAutoInteractSetting()
+        EndFishingSession()
         return
     elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_EQUIPMENT_CHANGED" then
         UpdateAutoInteractSetting()
@@ -269,6 +590,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         MAX_DOUBLE_CLICK = EasyFishingDB.doubleClickDelay
+        EnsureFishingStats()
+        fishWatcher:ClearAllPoints()
+        fishWatcher:SetPoint("CENTER", UIParent, "CENTER",
+            EasyFishingDB.fishWatcherX, EasyFishingDB.fishWatcherY)
         UpdateAutoInteractSetting()
 
         -- ------------------------------------------------------------------
@@ -277,17 +602,34 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local panel = CreateFrame("Frame", "EasyFishingOptionsPanel", UIParent)
         panel.name  = "EasyFishing: Forever"
 
-        local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        local settingsPage = CreateFrame("Frame", nil, panel)
+        settingsPage:SetAllPoints(panel)
+
+        local statisticsPage = CreateFrame("Frame", nil, panel)
+        statisticsPage:SetAllPoints(panel)
+        statisticsPage:Hide()
+
+        local settingsTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        settingsTab:SetSize(90, 22)
+        settingsTab:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -112, -10)
+        settingsTab:SetText("Settings")
+
+        local statisticsTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        statisticsTab:SetSize(90, 22)
+        statisticsTab:SetPoint("LEFT", settingsTab, "RIGHT", 4, 0)
+        statisticsTab:SetText("Statistics")
+
+        local title = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         title:SetPoint("TOPLEFT", 16, -16)
         title:SetText("EasyFishing: Forever")
 
-        local divider = panel:CreateTexture(nil, "ARTWORK")
+        local divider = settingsPage:CreateTexture(nil, "ARTWORK")
         divider:SetColorTexture(0.4, 0.4, 0.4, 0.6)
         divider:SetSize(550, 1)
         divider:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
 
         local function SectionHeader(text, anchor, yOff)
-            local fs = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+            local fs = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             fs:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOff)
             fs:SetTextColor(1, 0.82, 0)
             fs:SetText(text)
@@ -296,7 +638,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local function MakeCheckbox(label, desc, anchor, yOffset, dbKey)
             local cb = CreateFrame("CheckButton", "EasyFishingCB_" .. dbKey,
-                panel, "InterfaceOptionsCheckButtonTemplate")
+            settingsPage, "InterfaceOptionsCheckButtonTemplate")
             cb:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOffset)
             cb.Text:SetText(label)
             if desc then
@@ -319,6 +661,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     UpdateAutoInteractSetting()
                 elseif dbKey == "disableClickToMoveWhileFishing" then
                     UpdateAutoInteractSetting()
+                elseif dbKey == "showFishWatcher" then
+                    UpdateFishWatcher()
                 end
             end)
             return cb
@@ -331,13 +675,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             "Cast using the selected mouse button and click mode while holding a fishing pole.",
             secCast, -4, "enableDoubleClick")
 
-        local modeLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        local modeLabel = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         modeLabel:SetPoint("TOPLEFT", cbDC, "BOTTOMLEFT", 26, -10)
         modeLabel:SetText("Cast Click Mode")
 
         local UpdateSliderState
         local modeDropdown = CreateFrame("Frame", "EasyFishingCastModeDropdown",
-            panel, "UIDropDownMenuTemplate")
+            settingsPage, "UIDropDownMenuTemplate")
         modeDropdown:SetPoint("TOPLEFT", modeLabel, "BOTTOMLEFT", -16, -4)
         UIDropDownMenu_SetWidth(modeDropdown, 150)
         local function GetCastModeLabel(value)
@@ -365,7 +709,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end)
 
         -- Button picker -----------------------------------------------------
-        local btnLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        local btnLabel = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         btnLabel:SetPoint("TOPLEFT", modeDropdown, "BOTTOMLEFT", 16, -10)
         btnLabel:SetText("Cast Button")
         btnLabel:SetScript("OnEnter", function(self)
@@ -379,7 +723,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         btnLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         local dropdown = CreateFrame("Frame", "EasyFishingButtonDropdown",
-            panel, "UIDropDownMenuTemplate")
+            settingsPage, "UIDropDownMenuTemplate")
         dropdown:SetPoint("TOPLEFT", btnLabel, "BOTTOMLEFT", -16, -4)
         UIDropDownMenu_SetWidth(dropdown, 150)
         UIDropDownMenu_SetText(dropdown, GetButtonOption(EasyFishingDB.doubleClickButton).label)
@@ -401,17 +745,17 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end)
 
         -- Delay slider ------------------------------------------------------
-        local sliderLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        local sliderLabel = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         sliderLabel:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 16, -16)
         sliderLabel:SetText("Double-Click Window")
 
-        local sliderDesc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        local sliderDesc = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         sliderDesc:SetPoint("TOPLEFT", sliderLabel, "BOTTOMLEFT", 0, -4)
         sliderDesc:SetTextColor(0.7, 0.7, 0.7)
         sliderDesc:SetText("How quickly you must double-click. Lower = faster.")
 
         local slider = CreateFrame("Slider", "EasyFishingDelaySlider",
-            panel, "OptionsSliderTemplate")
+            settingsPage, "OptionsSliderTemplate")
         slider:SetPoint("TOPLEFT", sliderDesc, "BOTTOMLEFT", 0, -18)
         slider:SetMinMaxValues(0.1, 0.8)
         slider:SetValueStep(0.05)
@@ -453,12 +797,18 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end)
 
         local secLure = SectionHeader("Lures", slider, -24)
-        MakeCheckbox(
+        local cbAutoLure = MakeCheckbox(
             "Automatically Apply Lure",
-            "When your pole has no lure, the first selected cast action applies the weakest available lure. Repeat the selected click pattern to cast Fishing.",
+            "When your pole has no lure, the first selected cast action applies the weakest lure allowed by your Fishing skill. Repeat the selected click pattern to cast Fishing.",
             secLure, -4, "enableAutoLure")
 
-        local secMovement = SectionHeader("Movement", secLure, -46)
+        local secTracking = SectionHeader("Tracking", cbAutoLure, -10)
+        MakeCheckbox(
+            "Show Fish Watcher",
+            "Show the current fishing zone, session time, item count, and most recent catch.",
+            secTracking, -4, "showFishWatcher")
+
+        local secMovement = SectionHeader("Movement", secTracking, -46)
         local cbDisableClickToMove = MakeCheckbox(
             "Disable Click-to-Move While Fishing",
             "Temporarily turns off Click-to-Move while a fishing pole is equipped and click-to-cast is enabled, then restores its previous setting.",
@@ -470,6 +820,102 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             "Enable Sound Automation",
             "Turns on sound (and background sound) when you start fishing, then restores your original settings when done.",
             secSound, -4, "enableSound")
+
+        local statisticsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        statisticsTitle:SetPoint("TOPLEFT", 16, -16)
+        statisticsTitle:SetText("Fishing Statistics")
+
+        local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        statisticsSummary:SetPoint("TOPLEFT", statisticsTitle, "BOTTOMLEFT", 0, -8)
+        statisticsSummary:SetWidth(550)
+        statisticsSummary:SetJustifyH("LEFT")
+
+        local statisticsCaveat = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        statisticsCaveat:SetPoint("TOPLEFT", statisticsSummary, "BOTTOMLEFT", 0, -4)
+        statisticsCaveat:SetText("Counts are approximate: loot opened within 60 seconds of a cast is recorded.")
+
+        local zoneStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        zoneStatsTitle:SetPoint("TOPLEFT", statisticsCaveat, "BOTTOMLEFT", 0, -18)
+        zoneStatsTitle:SetText("Recorded Items by Zone")
+
+        local zoneStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        zoneStatsText:SetPoint("TOPLEFT", zoneStatsTitle, "BOTTOMLEFT", 0, -6)
+        zoneStatsText:SetWidth(550)
+        zoneStatsText:SetJustifyH("LEFT")
+
+        local itemStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        itemStatsTitle:SetPoint("TOPLEFT", zoneStatsText, "BOTTOMLEFT", 0, -14)
+        itemStatsTitle:SetText("Most Recorded Items")
+
+        local itemStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        itemStatsText:SetPoint("TOPLEFT", itemStatsTitle, "BOTTOMLEFT", 0, -6)
+        itemStatsText:SetWidth(550)
+        itemStatsText:SetJustifyH("LEFT")
+
+        local function BuildStatsLines(items, emptyText, limit, formatEntry)
+            local entries = {}
+            for name, data in pairs(items) do
+                if type(data) == "table" then
+                    table.insert(entries, {
+                        name = data.name or name,
+                        count = tonumber(data.totalItems or data.count) or 0,
+                        data = data,
+                    })
+                end
+            end
+            table.sort(entries, function(first, second)
+                if first.count == second.count then
+                    return first.name < second.name
+                end
+                return first.count > second.count
+            end)
+
+            if #entries == 0 then return emptyText end
+
+            local lines = {}
+            for index = 1, math.min(#entries, limit) do
+                if formatEntry then
+                    lines[index] = formatEntry(entries[index])
+                else
+                    lines[index] = string.format("%s: %d items", entries[index].name, entries[index].count)
+                end
+            end
+            if #entries > limit then
+                table.insert(lines, string.format("...and %d more", #entries - limit))
+            end
+            return table.concat(lines, "\n")
+        end
+
+        local function RefreshStatisticsPage()
+            local stats = EnsureFishingStats()
+            local zoneCount = 0
+            for _ in pairs(stats.zones) do
+                zoneCount = zoneCount + 1
+            end
+            statisticsSummary:SetText(string.format(
+                "Lifetime sessions: %d | Casts: %d | Fishing time: %s\nSkill-ups: %d | Recorded items: %d | Zones fished: %d",
+                stats.totalSessions, stats.totalCasts,
+                FormatFishingTime(stats.totalFishingSeconds), stats.totalSkillUps,
+                stats.totalItems, zoneCount))
+            zoneStatsText:SetText(BuildStatsLines(
+                stats.zones, "No zone totals recorded yet.", 10, function(entry)
+                    local zone = entry.data
+                    return string.format("%s: %d items | %d sessions | %d casts | %s time | %d skill-ups",
+                        entry.name, entry.count, zone.sessions, zone.casts,
+                        FormatFishingTime(zone.fishingSeconds), zone.skillUps)
+                end))
+            itemStatsText:SetText(BuildStatsLines(stats.itemsByID, "No items recorded yet.", 12))
+        end
+
+        settingsTab:SetScript("OnClick", function()
+            statisticsPage:Hide()
+            settingsPage:Show()
+        end)
+        statisticsTab:SetScript("OnClick", function()
+            settingsPage:Hide()
+            RefreshStatisticsPage()
+            statisticsPage:Show()
+        end)
 
         -- Register with the options UI --------------------------------------
         if InterfaceOptions_AddCategory then
@@ -585,9 +1031,19 @@ end)
 local soundFrame = CreateFrame("Frame")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+soundFrame:RegisterEvent("LOOT_OPENED")
+soundFrame:RegisterEvent("SKILL_LINES_CHANGED")
+soundFrame:RegisterEvent("CHAT_MSG_SKILL")
 local userBGSetting = nil
 
 soundFrame:SetScript("OnEvent", function(_, event, unit)
+    if event == "LOOT_OPENED" then
+        RecordFishingLoot()
+        return
+    elseif event == "SKILL_LINES_CHANGED" or event == "CHAT_MSG_SKILL" then
+        UpdateFishingSkillUps()
+        return
+    end
     if unit ~= "player" then return end
 
     if event == "UNIT_SPELLCAST_CHANNEL_START" then
@@ -595,6 +1051,10 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
         local channelName  = UnitChannelInfo("player")
         if channelName ~= expectedName then return end
 
+        StartFishingSession()
+        if fishingSession then
+            fishingSession.lastActivityAt = GetTime()
+        end
         isFishing = true
         EasyFishingDB = EasyFishingDB or {}
 
@@ -628,6 +1088,10 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
             SetCVarBG(userBGSetting)
             userBGSetting = nil
         end
+        if fishingSession then
+            fishingSession.lastActivityAt = GetTime()
+        end
+        ScheduleFishingSessionEnd()
 
     end
 end)
