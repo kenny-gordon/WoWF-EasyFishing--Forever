@@ -9,6 +9,7 @@ local ClearBinding = EF.ClearBinding
 local GetEquipmentSetIDs = EF.GetEquipmentSetIDs
 local EquipFishingOutfit = EF.EquipFishingOutfit
 local RestorePreviousEquipmentSet = EF.RestorePreviousEquipmentSet
+local ToggleFishingOutfit = EF.ToggleFishingOutfit
 local GetFishingSkill = EF.GetFishingSkill
 
 local function OpenChatWithLinks(text)
@@ -391,13 +392,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local secTracking = SectionHeader("Tracking", cbAutoLure, -10)
         MakeCheckbox(
             "Show Fish Watcher",
-            "Show the current fishing zone, session time, item count, and most recent catch.",
+            "Show the Watcher during an active fishing session. It hides when you move away or after two minutes without a cast.",
             secTracking, -4, "showFishWatcher")
 
         local secMovement = RightSectionHeader("Movement", -14)
         local cbDisableClickToMove = MakeCheckbox(
-            "Pause Click-to-Move While Fishing",
-            "Turns off Click-to-Move while your fishing pole is equipped and Click-to-Cast is on, then restores the previous setting.",
+            "Pause Click-to-Move With Pole",
+            "Turns off auto-interact movement while the fishing pole is equipped and Click-to-Cast is on, then restores your previous setting when the pole is removed.",
             secMovement, -4, "disableClickToMoveWhileFishing")
 
         -- Sound -------------------------------------------------------------
@@ -412,7 +413,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         outfitHint:SetPoint("TOPLEFT", secOutfit, "BOTTOMLEFT", 0, -4)
         outfitHint:SetWidth(260)
         outfitHint:SetJustifyH("LEFT")
-        outfitHint:SetText("Choose a saved equipment set for fishing. Restore your previous set when finished.")
+        outfitHint:SetText("Choose a saved fishing set. Toggle Gear swaps it with your previous set; /ef toggle also works in an action-bar macro.")
 
         local outfitDropdown = CreateFrame("Frame", "EasyFishingOutfitDropdown",
             settingsPage, "UIDropDownMenuTemplate")
@@ -465,6 +466,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         restoreOutfitButton:SetPoint("LEFT", equipOutfitButton, "RIGHT", 4, 0)
         restoreOutfitButton:SetText("Restore Gear")
         restoreOutfitButton:SetScript("OnClick", RestorePreviousEquipmentSet)
+
+        local toggleOutfitButton = CreateFrame("Button", nil, settingsPage, "UIPanelButtonTemplate")
+        toggleOutfitButton:SetSize(92, 22)
+        toggleOutfitButton:SetPoint("LEFT", restoreOutfitButton, "RIGHT", 4, 0)
+        toggleOutfitButton:SetText("Toggle Gear")
+        toggleOutfitButton:SetScript("OnClick", ToggleFishingOutfit)
 
         local statisticsDivider = PageHeader(statisticsPage, "Fishing Statistics")
 
@@ -1095,8 +1102,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.count:SetWidth(78)
             row.count:SetJustifyH("RIGHT")
 
-            row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+            row.detail:SetWidth(185)
+            row.detail:SetJustifyH("LEFT")
             row.detail:SetText(string.format("+%d Fishing  |  Skill %d+", lure.bonus, lure.minimumSkill))
 
             row:SetScript("OnEnter", function(self)
@@ -1120,8 +1129,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         for index, campItem in ipairs(EF.Data.FISHING_CAMP_ITEMS) do
             local row = CreateFrame("Frame", nil, guideTrainingView)
             row.campItem = campItem
-            row:SetSize(300, 30)
-            row:SetPoint("TOPLEFT", campCraftTitle, "BOTTOMLEFT", 0, -6 - ((index - 1) * 32))
+            row:SetSize(300, 28)
+            row:SetPoint("TOPLEFT", campCraftTitle, "BOTTOMLEFT", 0, -6 - ((index - 1) * 30))
             row:EnableMouse(true)
 
             row.icon = row:CreateTexture(nil, "ARTWORK")
@@ -1130,17 +1139,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.icon:SetTexture(GetItemTexture(campItem.id) or "Interface\\Icons\\INV_Misc_QuestionMark")
 
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, 0)
+            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
             row.name:SetWidth(185)
+            row.name:SetJustifyH("LEFT")
             row.name:SetText(campItem.name)
 
             row.count = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            row.count:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+            row.count:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
             row.count:SetWidth(78)
             row.count:SetJustifyH("RIGHT")
 
             row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+            row.detail:SetWidth(185)
+            row.detail:SetJustifyH("LEFT")
             row.detail:SetText(string.format("Craft skill %d  |  %s", campItem.craftSkill, campItem.source))
 
             row:SetScript("OnEnter", function(self)
@@ -1248,30 +1260,31 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         rewardScroll:SetPoint("TOPLEFT", findFishRow, "BOTTOMLEFT", -2, -8)
         rewardScroll:SetSize(300, 290)
         local rewardContent = CreateFrame("Frame", nil, rewardScroll)
-        rewardContent:SetSize(280, #EF.Data.FISHING_QUEST_REWARDS * 46)
+        rewardContent:SetSize(280, #EF.Data.FISHING_QUEST_REWARDS * 42)
         rewardScroll:SetScrollChild(rewardContent)
 
         local rewardRows = {}
         for index, quest in ipairs(EF.Data.FISHING_QUEST_REWARDS) do
             local row = CreateFrame("Frame", nil, rewardContent)
-            row:SetSize(278, 42)
-            row:SetPoint("TOPLEFT", rewardContent, "TOPLEFT", 0, -((index - 1) * 46))
+            row:SetSize(278, 40)
+            row:SetPoint("TOPLEFT", rewardContent, "TOPLEFT", 0, -((index - 1) * 42))
             row:EnableMouse(true)
 
             row.icon = row:CreateTexture(nil, "ARTWORK")
-            row.icon:SetSize(22, 22)
+            row.icon:SetSize(24, 24)
             row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
             row.icon:SetTexture(quest.rewardItemID and GetItemTexture(quest.rewardItemID)
                 or "Interface\\Icons\\INV_Misc_QuestionMark")
 
-            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
             row.name:SetWidth(242)
+            row.name:SetHeight(18)
             row.name:SetJustifyH("LEFT")
             row.name:SetWordWrap(false)
             row.name:SetText(quest.name)
 
-            row.reward = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.reward = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.reward:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
             row.reward:SetWidth(242)
             row.reward:SetJustifyH("LEFT")
@@ -1689,8 +1702,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 EquipFishingOutfit()
             elseif command == "restore" then
                 RestorePreviousEquipmentSet()
+            elseif command == "toggle" then
+                ToggleFishingOutfit()
             else
-                print("EasyFishing commands: /ef [menu|stats|atlas|guide|watch|equip|restore|link fish|link location|link gear]")
+                print("EasyFishing commands: /ef [menu|stats|atlas|guide|watch|equip|restore|toggle|link fish|link location|link gear]")
             end
         end
 

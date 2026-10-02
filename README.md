@@ -14,6 +14,7 @@ With a fishing pole equipped, press the selected mouse button once or twice to c
 - Choose your trigger button: **Left**, **Right**, **Middle**, **Mouse 4**, or **Mouse 5**
 - Choose a **Single Click** or **Double Click** pattern; adjust the double-click delay when using Double Click
 - Right-click casting may conflict with Click-to-Move; Left Mouse is the default.
+- When finished fishing, use **Toggle Gear** to restore your previous set before interacting with mailboxes or NPCs. This removes the pole so Click-to-Cast no longer intercepts clicks.
 - Adjustable double-click delay (0.1s–0.8s)
 - Casts only when standing still, out of combat, no mouseover target, and no unit selected
 
@@ -21,7 +22,7 @@ With a fishing pole equipped, press the selected mouse button once or twice to c
 When enabled, the first click applies the weakest lure allowed by your Fishing skill if your pole has none. Shiny Bauble requires skill 1, Nightcrawlers or Fish Lens require 50, and stronger lures require 100. Click again using the selected pattern to cast Fishing. If a lure is already active or none can be applied, the click casts Fishing directly.
 
 ### 🎣 Fish Watcher
-The optional watcher shows Fishing skill, time fishing, casts, skill gains, items per hour, items caught this session, items caught in the current zone, the latest catch, and this session's top catches. Statistics shows total fishing sessions, casts, time fishing, skill gains, items caught, and per-zone activity and top catches. Only items shown in the Forever Fishing loot window are counted.
+The optional watcher shows Fishing skill, time fishing, casts, skill gains, items per hour, items caught this session, items caught in the current zone, the latest catch, and this session's top catches. It stays visible while a fishing session is active, then hides when you move away or after two minutes without another cast. Statistics shows total fishing sessions, casts, time fishing, skill gains, items caught, and per-zone activity and top catches. Only items shown in the Forever Fishing loot window are counted.
 
 ### 🗺️ Fishing Locations
 The Locations tab records fish caught by zone, area, approximate map coordinates, and broad server-time ranges. Filter by zone; expand an area to see its recorded locations, then select one to set a map waypoint. Catches within 15 yards are combined into one location. This is a personal catch history, not a prefilled habitat list or a verified map of fishing-pool boundaries.
@@ -30,10 +31,10 @@ The Locations tab records fish caught by zone, area, approximate map coordinates
 The Guide has Training, Fishing NPCs, and Gear & Rewards views. It highlights your current rank, searches 25 fishing NPCs by name, role, faction, town, or zone, and lists fishing poles, gear bonuses, Find Fish, and notable quest rewards. Lure and campsite items use in-game icons and show bag counts; campsite tooltips include recipe materials and effects. The 225-300 leveling route is marked as undocumented in the source guide.
 
 ### 🎒 Fishing Outfit
-Choose a saved Equipment Manager set for fishing, equip it, then restore the previous saved set. Outfit switching is manual and unavailable in combat. The current gear must match a saved set so EasyFishing can restore it safely.
+Choose a saved Equipment Manager set for fishing. **Toggle Gear** switches between it and the saved set you wore before. Outfit switching is unavailable in combat, and your current gear must match a saved set before EasyFishing can remember it for restoration.
 
 ### 🖱️ Click-to-Move
-The optional Click-to-Move override temporarily disables the game setting while a fishing pole is equipped and click-to-cast is enabled. EasyFishing restores the exact previous setting when the pole is unequipped, click-to-cast is disabled, the option is turned off, or the player logs out.
+The optional Click-to-Move setting turns off auto-interact movement while a fishing pole is equipped and Click-to-Cast is enabled. EasyFishing restores the previous setting when the pole is removed, Click-to-Cast is disabled, the option is turned off, or you log out.
 
 ### 🔊 Sound Automation
 Tired of alt-tabbing to silence or unmute WoW? EasyFishing automatically:
@@ -53,7 +54,7 @@ Everything is configurable from **Interface → AddOns → EasyFishing: Forever*
 | Double-Click Delay | Maximum time between clicks; only used with Double Click |
 | Apply Lure Automatically | Apply an available lure before casting when none is active |
 | Show Fish Watcher | Show or hide the session and zone tracking panel |
-| Pause Click-to-Move While Fishing | Temporarily pause Click-to-Move and restore its previous setting afterward |
+| Pause Click-to-Move With Pole | Temporarily pause auto-interact movement while the pole is equipped |
 | Turn Sound On While Fishing | Turn on game sound while fishing, then restore the previous setting |
 | Fishing Outfit | Select a saved Equipment Manager set, equip it, or restore the previous saved set |
 
@@ -68,11 +69,19 @@ Everything is configurable from **Interface → AddOns → EasyFishing: Forever*
 | `/ef watch` | Toggle the Fish Watcher |
 | `/ef equip` | Equip the selected fishing outfit |
 | `/ef restore` | Restore the previous saved outfit |
+| `/ef toggle` | Switch between the selected fishing set and your previous set |
 | `/ef link fish` | Prefill chat with the last caught fish hyperlink |
 | `/ef link location` | Prefill chat with the selected fishing-location waypoint link |
 | `/ef link gear` | Prefill chat with links to the selected outfit's fishing gear |
 
 Link commands open the chat edit box with the links inserted; they do not send the message.
+
+To put the gear toggle on your action bar, create a macro and drag it onto a bar:
+
+```text
+#showtooltip Fishing Pole
+/ef toggle
+```
 
 ### ID Data
 Static fishing spell, lure, pole, and equipment-slot IDs are maintained in [Data.lua](EasyFishing/Data.lua). Fish item IDs, map IDs, and equipment-set IDs are captured from the client at runtime; the addon currently uses no trainer NPC IDs.

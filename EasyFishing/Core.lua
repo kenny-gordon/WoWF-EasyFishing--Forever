@@ -168,8 +168,10 @@ local function EquipFishingOutfit()
         return
     end
 
-    if UseFishingEquipmentSet(setID) and not EasyFishingDB.previousFishingSetID then
+    if UseFishingEquipmentSet(setID) then
         EasyFishingDB.previousFishingSetID = currentSetID
+        local setName = C_EquipmentSet.GetEquipmentSetInfo(setID)
+        print("EasyFishing: equipped " .. (setName or "fishing gear") .. ".")
     end
 end
 
@@ -181,6 +183,22 @@ local function RestorePreviousEquipmentSet()
     end
     if UseFishingEquipmentSet(setID) then
         EasyFishingDB.previousFishingSetID = nil
+        local setName = C_EquipmentSet.GetEquipmentSetInfo(setID)
+        print("EasyFishing: restored " .. (setName or "your previous gear") .. ".")
+    end
+end
+
+local function ToggleFishingOutfit()
+    local fishingSetID = tonumber(EasyFishingDB and EasyFishingDB.fishingOutfitSetID)
+    if not fishingSetID then
+        print("EasyFishing: select a fishing equipment set first.")
+        return
+    end
+
+    if GetEquippedEquipmentSetID() == fishingSetID then
+        RestorePreviousEquipmentSet()
+    else
+        EquipFishingOutfit()
     end
 end
 
@@ -339,6 +357,7 @@ EF.GetAutoLureID = GetAutoLureID
 EF.GetEquipmentSetIDs = GetEquipmentSetIDs
 EF.EquipFishingOutfit = EquipFishingOutfit
 EF.RestorePreviousEquipmentSet = RestorePreviousEquipmentSet
+EF.ToggleFishingOutfit = ToggleFishingOutfit
 EF.GetCVarBG = GetCVarBG
 EF.SetCVarBG = SetCVarBG
 EF.GetCVarSound = GetCVarSound

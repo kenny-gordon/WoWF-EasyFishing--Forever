@@ -459,6 +459,7 @@ end)
 local soundFrame = CreateFrame("Frame")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+soundFrame:RegisterEvent("PLAYER_STARTED_MOVING")
 soundFrame:RegisterEvent("LOOT_OPENED")
 soundFrame:RegisterEvent("SKILL_LINES_CHANGED")
 soundFrame:RegisterEvent("CHAT_MSG_SKILL")
@@ -467,6 +468,11 @@ local userBGSetting = nil
 soundFrame:SetScript("OnEvent", function(_, event, unit)
     if event == "LOOT_OPENED" then
         RecordFishingLoot()
+        return
+    elseif event == "PLAYER_STARTED_MOVING" then
+        if fishingSession then
+            EndFishingSession()
+        end
         return
     elseif event == "SKILL_LINES_CHANGED" or event == "CHAT_MSG_SKILL" then
         UpdateFishingSkillUps()
@@ -479,11 +485,11 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
         local channelName  = UnitChannelInfo("player")
         if channelName ~= expectedName then return end
 
+        isFishing = true
         StartFishingSession()
         if fishingSession then
             fishingSession.lastActivityAt = GetTime()
         end
-        isFishing = true
         EasyFishingDB = EasyFishingDB or {}
 
         -- Sound automation
@@ -505,6 +511,7 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         if not isFishing then return end
         isFishing = false
+        UpdateFishWatcher()
 
         if EasyFishingDB then
             if EasyFishingDB.userSoundSetting ~= nil then
