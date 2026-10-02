@@ -574,8 +574,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         locationsScroll:SetScrollChild(locationsContent)
 
         local locationRows = {}
+        local expandedAreas = {}
         local RefreshLocationsPage
-        RefreshLocationsPage = function()
+        RefreshLocationsPage = function(scrollOffset)
             for _, row in ipairs(locationRows) do
                 row:Hide()
             end
@@ -591,17 +592,49 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     end
                 end
             end
-            table.sort(spots, function(firstSpot, secondSpot)
-                if firstSpot.spot.totalItems == secondSpot.spot.totalItems then
-                    if firstSpot.zone == secondSpot.zone then
-                        return (firstSpot.spot.subzone or "") < (secondSpot.spot.subzone or "")
-                    end
-                    return firstSpot.zone < secondSpot.zone
+            local groupsByKey = {}
+            local groups = {}
+            for _, entry in ipairs(spots) do
+                local subzone = type(entry.spot.subzone) == "string" and entry.spot.subzone or ""
+                local areaName = subzone ~= "" and subzone or entry.zone
+                local groupKey = entry.zone .. "\001" .. areaName
+                local group = groupsByKey[groupKey]
+                if not group then
+                    group = {
+                        key = groupKey,
+                        zone = entry.zone,
+                        area = areaName,
+                        spots = {},
+                        totalItems = 0,
+                    }
+                    groupsByKey[groupKey] = group
+                    table.insert(groups, group)
                 end
-                return firstSpot.spot.totalItems > secondSpot.spot.totalItems
+                table.insert(group.spots, entry.spot)
+                group.totalItems = group.totalItems + (tonumber(entry.spot.totalItems) or 0)
+            end
+            table.sort(groups, function(first, second)
+                if first.totalItems == second.totalItems then
+                    if first.zone == second.zone then
+                        return first.area < second.area
+                    end
+                    return first.zone < second.zone
+                end
+                return first.totalItems > second.totalItems
             end)
+            for _, group in ipairs(groups) do
+                table.sort(group.spots, function(first, second)
+                    local firstCount = tonumber(first.totalItems) or 0
+                    local secondCount = tonumber(second.totalItems) or 0
+                    if firstCount == secondCount then
+                        if first.x == second.x then return (first.y or 0) < (second.y or 0) end
+                        return (first.x or 0) < (second.x or 0)
+                    end
+                    return firstCount > secondCount
+                end)
+            end
 
-            if #spots == 0 then
+            if #groups == 0 then
                 if atlasZoneFilter == "All zones" then
                     locationsDescription:SetText("No fishing locations recorded yet. Confirmed catches will build this character's observed fish-by-area atlas.")
                 else
@@ -613,40 +646,66 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 return
             end
             locationsDescription:SetText(string.format(
-                "Observed catches on this character, grouped by area. Click a row to place a waypoint. Showing all %d approximate spots.",
-                #spots))
-            locationsContent:SetHeight(math.max(1, #spots * 54))
-            locationsScroll:SetVerticalScroll(0)
+                "Observed catches by area. Expand an area to see its locations; click a location to set a waypoint. Showing %d areas and %d approximate spots.",
+                #groups, #spots))
+
+            local displayRows = {}
+            for _, group in ipairs(groups) do
+                if #group.spots > 1 then
+                    table.insert(displayRows, { kind = "area", group = group })
+                    if expandedAreas[group.key] then
+                        for spotIndex, spot in ipairs(group.spots) do
+                            table.insert(displayRows, {
+                                kind = "spot",
+                                group = group,
+                                spot = spot,
+                                index = spotIndex,
+                            })
+                        end
+                    end
+                else
+                    table.insert(displayRows, {
+                        kind = "spot",
+                        group = group,
+                        spot = group.spots[1],
+                    })
+                end
+            end
+            locationsContent:SetHeight(math.max(1, #displayRows * 54))
             locationsScroll:UpdateScrollChildRect()
+            locationsScroll:SetVerticalScroll(scrollOffset or 0)
 
-            for index, entry in ipairs(spots) do
+            for index, entry in ipairs(displayRows) do
+                local group = entry.group
                 local spot = entry.spot
-                local fish = {}
-                for itemID, item in pairs(spot.itemsByID) do
-                    if type(item) == "table" then
-                        table.insert(fish, {
-                            id = itemID,
-                            name = item.name or ("Item " .. itemID),
-                            count = tonumber(item.count) or 0,
-                            timeBuckets = item.timeBuckets or {},
-                        })
+                local fish, fishSummary = {}, {}
+                if spot then
+                    for itemID, item in pairs(spot.itemsByID) do
+                        if type(item) == "table" then
+                            table.insert(fish, {
+                                id = itemID,
+                                name = item.name or ("Item " .. itemID),
+                                count = tonumber(item.count) or 0,
+                                timeBuckets = item.timeBuckets or {},
+                            })
+                        end
                     end
-                end
-                table.sort(fish, function(firstFish, secondFish)
-                    if firstFish.count == secondFish.count then
-                        return firstFish.name < secondFish.name
-                    end
-                    return firstFish.count > secondFish.count
-                end)
+                    table.sort(fish, function(firstFish, secondFish)
+                        if firstFish.count == secondFish.count then
+                            return firstFish.name < secondFish.name
+                        end
+                        return firstFish.count > secondFish.count
+                    end)
 
-                local fishSummary = {}
-                for fishIndex = 1, math.min(#fish, 2) do
-                    table.insert(fishSummary, string.format("%s x%d", fish[fishIndex].name, fish[fishIndex].count))
+                    for fishIndex = 1, math.min(#fish, 2) do
+                        table.insert(fishSummary, string.format("%s x%d", fish[fishIndex].name, fish[fishIndex].count))
+                    end
+                    if #fish > 2 then
+                        table.insert(fishSummary, string.format("+%d more", #fish - 2))
+                    end
                 end
-                if #fish > 2 then
-                    table.insert(fishSummary, string.format("+%d more", #fish - 2))
-                end
-                local areaName = spot.subzone ~= "" and spot.subzone or entry.zone
+                local areaLabel = group.area == group.zone
+                    and group.zone or (group.zone .. " / " .. group.area)
                 local row = locationRows[index]
                 if not row then
                     row = CreateFrame("Button", nil, locationsContent, "BackdropTemplate")
@@ -683,11 +742,31 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     locationRows[index] = row
                 end
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", locationsContent, "TOPLEFT", 0, -((index - 1) * 54))
-                row.areaLabel:SetText(entry.zone .. " / " .. areaName)
-                row.coordinateLabel:SetText(string.format("%.1f, %.1f", spot.x * 100, spot.y * 100))
-                row.catchLabel:SetText(#fishSummary > 0 and table.concat(fishSummary, "  |  ") or "No item counts")
+                local isNestedSpot = entry.kind == "spot" and entry.index ~= nil
+                row:SetSize(isNestedSpot and 568 or 580, 50)
+                row:SetPoint("TOPLEFT", locationsContent, "TOPLEFT", isNestedSpot and 12 or 0,
+                    -((index - 1) * 54))
+                if entry.kind == "area" then
+                    row.areaLabel:SetText(areaLabel)
+                    row.coordinateLabel:SetText((expandedAreas[group.key] and "- " or "+ ")
+                        .. #group.spots .. " locations")
+                    row.catchLabel:SetText(string.format("%d items recorded", group.totalItems))
+                    row:SetBackdropColor(0.08, 0.07, 0.04, 0.82)
+                    row:SetBackdropBorderColor(0.42, 0.34, 0.16, 1)
+                else
+                    row.areaLabel:SetText(entry.index and ("Location " .. entry.index) or areaLabel)
+                    row.coordinateLabel:SetText(string.format("%.1f, %.1f", spot.x * 100, spot.y * 100))
+                    row.catchLabel:SetText(#fishSummary > 0 and table.concat(fishSummary, "  |  ") or "No item counts")
+                    row:SetBackdropColor(0.04, 0.05, 0.05, 0.72)
+                    row:SetBackdropBorderColor(0.24, 0.27, 0.27, 1)
+                end
                 row:SetScript("OnClick", function()
+                    if entry.kind == "area" then
+                        local currentScroll = locationsScroll:GetVerticalScroll()
+                        expandedAreas[group.key] = not expandedAreas[group.key]
+                        RefreshLocationsPage(currentScroll)
+                        return
+                    end
                     if not C_Map or not C_Map.CanSetUserWaypointOnMap
                         or not C_Map.SetUserWaypoint or not UiMapPoint
                         or not UiMapPoint.CreateFromCoordinates
@@ -704,7 +783,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                         mapID = spot.mapID,
                         x = spot.x,
                         y = spot.y,
-                        label = entry.zone .. " / " .. areaName,
+                        label = areaLabel .. (entry.index and (" / Location " .. entry.index) or ""),
                     }
                     if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
                         C_SuperTrack.SetSuperTrackedUserWaypoint(true)
@@ -718,24 +797,40 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     self:SetBackdropColor(0.10, 0.12, 0.11, 0.9)
                     self:SetBackdropBorderColor(0.78, 0.58, 0.18, 1)
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText("Observed catches at this location")
-                    for _, fishItem in ipairs(fish) do
-                        GameTooltip:AddLine(string.format("%s: %d", fishItem.name, fishItem.count), 1, 1, 1)
-                        local timeParts = {}
-                        for bucket = 0, 3 do
-                            local count = tonumber(fishItem.timeBuckets[bucket]) or 0
-                            if count > 0 then
-                                table.insert(timeParts, string.format("%02d-%02d: %d", bucket * 6, bucket * 6 + 6, count))
+                    if entry.kind == "area" then
+                        GameTooltip:SetText(areaLabel)
+                        GameTooltip:AddLine(expandedAreas[group.key]
+                            and "Click to hide recorded locations."
+                            or "Click to show recorded locations.", 1, 1, 1, true)
+                    else
+                        GameTooltip:SetText("Observed catches at this location")
+                        for _, fishItem in ipairs(fish) do
+                            GameTooltip:AddLine(string.format("%s: %d", fishItem.name, fishItem.count), 1, 1, 1)
+                            local timeParts = {}
+                            for bucket = 0, 3 do
+                                local count = tonumber(fishItem.timeBuckets[bucket]) or 0
+                                if count > 0 then
+                                    table.insert(timeParts, string.format("%02d-%02d: %d", bucket * 6, bucket * 6 + 6, count))
+                                end
+                            end
+                            if #timeParts > 0 then
+                                GameTooltip:AddLine("Server time: " .. table.concat(timeParts, ", "), 0.75, 0.75, 0.75, true)
                             end
                         end
-                        if #timeParts > 0 then
-                            GameTooltip:AddLine("Server time: " .. table.concat(timeParts, ", "), 0.75, 0.75, 0.75, true)
-                        end
+                        GameTooltip:AddLine("Coordinates are approximate catch positions, not verified pool boundaries.", 0.75, 0.75, 0.75, true)
                     end
-                    GameTooltip:AddLine("Coordinates are approximate catch positions, not verified pool boundaries.", 0.75, 0.75, 0.75, true)
                     GameTooltip:Show()
                 end)
-                row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                row:SetScript("OnLeave", function(self)
+                    if entry.kind == "area" then
+                        self:SetBackdropColor(0.08, 0.07, 0.04, 0.82)
+                        self:SetBackdropBorderColor(0.42, 0.34, 0.16, 1)
+                    else
+                        self:SetBackdropColor(0.04, 0.05, 0.05, 0.72)
+                        self:SetBackdropBorderColor(0.24, 0.27, 0.27, 1)
+                    end
+                    GameTooltip:Hide()
+                end)
                 row:Show()
             end
         end

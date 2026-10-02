@@ -24,7 +24,7 @@ When enabled, the first cast action with an un-lured fishing pole applies the we
 The optional watcher shows Fishing skill, session time, casts, skill-ups, session items/hour, **items this session**, **all-time items in the current zone**, the last catch, and the top session catches. The Statistics tab shows lifetime sessions, casts, fishing time, skill-ups, recorded items, plus per-zone activity and item rankings. Loot is counted only when the Forever client identifies the loot window as fishing loot.
 
 ### 🗺️ Fish Atlas
-The Locations tab learns fish species by zone, approximate subzone, map coordinates, and broad server-time buckets from this character's confirmed catches. Filter the list by zone and click a recorded spot to set a world-map waypoint. Nearby catches within 15 yards merge into one observed spot. This is a personal catch history, not a prefilled habitat list or a verified map of fishing-pool boundaries.
+The Locations tab learns fish species by zone, approximate subzone, map coordinates, and broad server-time buckets from this character's confirmed catches. Filter by zone; areas with multiple recorded locations expand to individual coordinates, and clicking a location sets a world-map waypoint. Nearby catches within 15 yards merge into one observed spot. This is a personal catch history, not a prefilled habitat list or a verified map of fishing-pool boundaries.
 
 ### 📖 Forever Fishing Guide
 The Guide tab shows your current Fishing skill alongside documented Forever training ranks, leveling areas, lure requirements, and campsite fishing crafts. The 225-300 leveling route is marked as undocumented in the source guide.
