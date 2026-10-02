@@ -56,6 +56,8 @@ function methods:GetFontString()
 end
 function methods:SetText(text) self.text = tostring(text or '') end
 function methods:SetTexture(texture) self.texture = texture end
+function methods:SetBackdrop(backdrop) self.backdrop=backdrop end
+function methods:SetBackdropColor(...) self.backdropColor={...} end
 function methods:GetText() return self.text end
 function methods:SetChecked(value) self.checked = not not value end
 function methods:GetChecked() return self.checked end
@@ -88,6 +90,7 @@ function methods:SetShown(value) if value then self:Show() else self:Hide() end 
 function methods:GetVerticalScrollRange() return 0 end
 function methods:GetVerticalScroll() return self.scroll or 0 end
 function methods:SetVerticalScroll(value) self.scroll = value end
+function methods:SetScrollChild(child) self.scrollChild=child end
 function methods:GetStringHeight()
     if TallDescriptions and self.width==300 and type(self.text)=='string' and #self.text>120 then return 120 end
     local lines=1
@@ -98,17 +101,22 @@ function methods:SetAttribute(key, value) assert(not Combat or SecureState); sel
 function methods:GetAttribute(key) return self[key] end
 function methods:ClearBindings() assert(SecureState); Binding=nil end
 function methods:GetParent() return self.parent end
+function methods:IsMouseMotionFocus() return self.motionFocus end
+function methods:EnableMouseMotion(value) self.mouseMotionEnabled=value end
+function methods:SetMapID(mapID) self.mapID=mapID end
 for _, key in ipairs({
     'SetFrameStrata','SetClampedToScreen','SetMovable','EnableMouse','RegisterForDrag',
-    'SetBackdrop','SetBackdropColor','SetBackdropBorderColor','SetAlpha','RegisterForClicks',
+    'SetBackdropBorderColor','SetAlpha','RegisterForClicks',
     'Cancel','SetJustifyH','SetWordWrap','SetTextColor','SetColorTexture','SetAllPoints',
     'ClearAllPoints','StartMoving','StopMovingOrSizing','SetDesaturated',
     'SetAutoFocus','SetMaxLetters','SetMultiLine','SetFontObject','SetTextInsets',
-    'SetScrollChild','UpdateScrollChildRect','SetFocus','HighlightText','SetValue',
+    'UpdateScrollChildRect','SetFocus','HighlightText','SetValue',
     'SetMinMaxValues','SetValueStep','Raise','SetOwner','AddLine','SetHighlightTexture','SetHyperlink','SetDisabledFontObject'
 }) do methods[key] = function() end end
 UIParent = CreateFrame('Frame'); UIParent:SetSize(1280,720)
 WorldFrame = CreateFrame('Frame'); GameTooltip = CreateFrame('Frame')
+WorldMapFrame = CreateFrame('Frame')
+function ShowUIPanel(frame) MapOpened=frame; frame:Show() end
 Minimap = CreateFrame('Frame'); Minimap:SetSize(140,140)
 UISpecialFrames, SlashCmdList, StaticPopupDialogs = {}, {}, {}
 ACCEPT, CANCEL = 'Accept','Cancel'
@@ -262,8 +270,17 @@ Emit('PLAYER_LOGIN')
 assert(EasyFishingDB.doubleClickDelay==0.4 and EasyFishingDB.doubleClickButton=='LeftButton')
 assert(EasyFishingDB.castClickMode=='DoubleClick' and EasyFishingCharDB.fishWatcherX==0)
 assert(EasyFishingCharDB.fishWatcherY==42 and EasyFishingCharDB.windowX==0)
+assert(WorldFrame.mouseMotionEnabled==true, 'click handling enables WorldFrame mouse-motion focus')
 assert(SlashCmdList.EASYFISHING and Addon.OpenWindow)
 assert(RegisteredSettings and #UISpecialFrames==2)
+assert(NamedFrames.EasyFishingWindow.backdrop.bgFile=='Interface\\DialogFrame\\UI-DialogBox-Background')
+assert(NamedFrames.EasyFishingWindow.backdrop.edgeFile=='Interface\\DialogFrame\\UI-DialogBox-Border')
+assert(NamedFrames.EasyFishingWindow.backdropColor[1]==1 and NamedFrames.EasyFishingWindow.backdropColor[4]==1)
+assert(NamedFrames.EasyFishingAtlasScrollFrame.width==620)
+assert(NamedFrames.EasyFishingTrainerScrollFrame.width==620)
+assert(NamedFrames.EasyFishingQuestRewardsScroll.width==300)
+assert(NamedFrames.EasyFishingAtlasScrollFrame.scrollChild.width==600)
+assert(NamedFrames.EasyFishingTrainerScrollFrame.scrollChild.width==600)
 for _,key in ipairs({'enableDoubleClick','enableAutoLure','preferStrongestLure','enableSound',
     'showFishWatcher','showFishingControls','showMinimapButton','disableClickToMoveWhileFishing'}) do
     local checkbox=NamedFrames['EasyFishingCB_'..key]; local previous=checkbox:GetChecked()
@@ -298,19 +315,30 @@ for _,frame in ipairs(Frames) do
     if frame.boost and frame.boost.iconType=='spell' then
         assert(frame.icon.texture=='Interface\\Icons\\INV_Misc_QuestionMark'); spellRowFound=true
     end
+    if frame.boost then assert(frame.width==300, 'gear columns use the common 300px column width') end
     if frame.kind=='Button' and type(frame.name)=='table' and frame.name.text=='Find Fish' then
         frame.scripts.OnClick(); assert(SpellBookOpened=='spell')
     end
 end
 assert(spellRowFound); MissingSpellTexture=false; Emit('GET_ITEM_INFO_RECEIVED')
 SlashCmdList.EASYFISHING('npcs')
+assert(NamedFrames.EasyFishingTrainerScrollFrame.width==620)
 local npcWaypoint=false
 for _,frame in ipairs(Frames) do
+    if frame.waypointButton and frame.width==600 then
+        assert(frame.waypointButton.point[4]==-8)
+        assert(frame.coordinates.point[4]==414 and frame.location.width==168)
+        assert(frame.width+frame.waypointButton.point[4]==592)
+        frame.scripts.OnEnter(frame)
+        assert(GameTooltip.text~=nil)
+    end
     if frame.waypointButton and frame.waypointButton.enabled then
         frame.waypointButton.scripts.OnClick(); npcWaypoint=true; break
     end
 end
 assert(npcWaypoint and Waypoint.x>=0 and Waypoint.x<=1 and Waypoint.y>=0 and Waypoint.y<=1)
+assert(MapOpened==WorldMapFrame and WorldMapFrame.mapID==Waypoint.mapID and WorldMapFrame:IsShown(),
+    'NPC waypoint opens the map at the waypoint location')
 assert(RegisteredSplash==NamedFrames.EasyFishingOptionsPanel)
 assert(RegisteredSplash~=RegisteredSettings and RegisteredSplash.name=='EasyFishing: Forever')
 Addon.OpenOptions('splash')
@@ -410,7 +438,8 @@ assert(Binding==nil and NamedFrames.EasyFishingAutoLureButton.type==nil)
 GetMouseFocus=function() return WorldFrame end
 Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton')
 HasTarget=true; NamedFrames.EasyFishingAutoLureButton.scripts.PreClick(NamedFrames.EasyFishingAutoLureButton)
-assert(Binding==nil); HasTarget=false
+assert(Binding=='BUTTON1', 'a selected target alone must not block fishing')
+Addon.ClearBinding(); HasTarget=false
 Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton'); assert(Binding=='BUTTON1')
 Emit('PLAYER_REGEN_DISABLED')
 assert(NamedFrames.EasyFishingKeyboardCastButton.type==nil and NamedFrames.EasyFishingAutoLureButton.type==nil)
@@ -435,7 +464,24 @@ Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton'); as
 Addon.ClearBinding()
 GetMouseFoci=function() return {GameTooltip,WorldFrame} end
 Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton'); assert(Binding==nil)
+GetMouseFocus=function() return GameTooltip end
+GetMouseFoci=function() return {WorldFrame} end
+Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton')
+assert(Binding=='BUTTON1', 'topmost WorldFrame focus takes precedence over stale legacy focus')
+Addon.ClearBinding()
 GetMouseFocus=function() return WorldFrame end
+GetMouseFoci=function() return {GameTooltip,WorldFrame} end
+Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton')
+assert(Binding==nil, 'UI focus above WorldFrame must not cast')
+GetMouseFoci=function() return {WorldFrame} end
+GetMouseFocus=function() return GameTooltip end
+GetMouseFoci=function() return {} end
+WorldFrame.motionFocus=true
+Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton')
+assert(Binding=='BUTTON1', 'WorldFrame mouse-motion focus detects world input when the focus stack is empty')
+Addon.ClearBinding(); WorldFrame.motionFocus=false
+GetMouseFocus=function() return WorldFrame end
+GetMouseFoci=function() return {WorldFrame} end
 local oldMode=EasyFishingDB.castClickMode
 EasyFishingDB.castClickMode='SingleClick'; Addon.ClearBinding(); MouseActions=0
 DispatchMouse('LeftButton',true)
@@ -448,10 +494,14 @@ Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton')
 Clock=Clock+0.1; DispatchMouse('LeftButton',true)
 assert(MouseActions==1 and Binding==nil, 'double click executes on second press')
 assert(Addon.GetClickDiagnostics():find('armed: %d+'))
+assert(Addon.GetClickDiagnostics():find('Focus: legacy=',1,true))
 EasyFishingDB.castClickMode=oldMode; Addon.ClearBinding()
 Addon.SetFishingPaused(true); assert(Addon.GetMouseFishingStatus():find('paused',1,true))
 Addon.SetFishingPaused(false)
-HasTarget=true; assert(Addon.GetMouseFishingStatus():find('target',1,true)); HasTarget=false
+HasTarget=true
+assert(Addon.GetMouseFishingStatus():find('Ready:',1,true)
+    and not Addon.GetMouseFishingStatus():find('target',1,true))
+HasTarget=false
 SlashCmdList.EASYFISHING('status'); assert(Messages[#Messages]:find('Left Mouse',1,true))
 Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton'); assert(Binding=='BUTTON1')
 Emit('LOOT_OPENED'); assert(Binding==nil)
@@ -584,8 +634,23 @@ C_Map.GetWorldPosFromMapPos=nil
 local key,existing=Addon.FindFishingSpot(zoneStats,1438,0.503,0.5)
 assert(existing, 'exact-coordinate matching works without world-distance API')
 C_Map.GetWorldPosFromMapPos=oldWorldAPI
-Zone='Zone B'; Cast(); Emit('LOOT_OPENED'); Emit('LOOT_CLOSED'); Addon.EndFishingSession()
+Zone='Zone B'; Cast(); Emit('LOOT_OPENED'); Emit('LOOT_CLOSED')
+Emit('PLAYER_STARTED_MOVING')
+assert(Addon.FishWatcher:IsShown(), 'movement keeps the watcher visible during the idle grace period')
+local movementEndTimer=Timers[#Timers]
+assert(movementEndTimer.delay==120)
+local _, sessionTimeBeforeIdle=Addon.GetFishingSessionTime()
+Clock=Clock+60
+local _, sessionTimeDuringIdle=Addon.GetFishingSessionTime()
+assert(sessionTimeDuringIdle==sessionTimeBeforeIdle, 'session duration freezes while idle after movement')
+Clock=Clock+60; movementEndTimer.callback()
+assert(not Addon.FishWatcher:IsShown(), 'idle timeout ends the fishing session')
 assert(Addon.EnsureFishingStats().zones['Zone B'].casts==1)
+Cast()
+PoleEquipped=false; Emit('PLAYER_EQUIPMENT_CHANGED')
+local endedSessionZone=Addon.GetFishingSessionTime()
+assert(endedSessionZone==nil and not Addon.FishWatcher:IsShown(), 'removing the pole ends the watcher session')
+PoleEquipped=true
 Addon.GetCharacterDB().lastFishingSpot={mapID=1438,x=0.5,y=0.5,label='Lake'}
 SlashCmdList.EASYFISHING('link location'); assert(ChatText:find('1438',1,true))
 WaypointAllowed=false; ChatText=nil

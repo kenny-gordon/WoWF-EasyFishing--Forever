@@ -39,7 +39,7 @@ With a fishing pole equipped, press the selected mouse button once or twice to c
 - Right-click casting may conflict with Click-to-Move; Left Mouse is the default.
 - When finished fishing, use **Toggle Gear** to restore your previous set before interacting with mailboxes or NPCs. This removes the pole so Click-to-Cast no longer intercepts clicks.
 - Adjustable double-click delay (0.1s–0.8s)
-- Casts only from the game world when standing still, out of combat, with no mouseover target and no unit selected; clicks on UI controls never cast
+- Casts only from the game world when standing still, out of combat, and not hovering a unit; clicks on UI controls never cast
 
 Double Click is the default and casts on the second press. Single Click casts when you release the selected mouse button. If clicking does nothing, run `/ef status` with the cursor over the game world to see the active button/pattern and any casting blocker. An eligible lure may be applied instead of casting Fishing on the first action.
 
@@ -49,7 +49,7 @@ When enabled, the first click applies an eligible lure if your pole has none. By
 ### 🎣 Fish Watcher
 The optional watcher uses a fixed native-style layout with separate status and zone lines, four aligned metrics, session/zone totals, items per hour, and item icons for the latest catch and top two session catches. Long item names stay contained; hover for the full item tooltip. Click a catch to open that fish in the journal; supported modified-item clicks use WoW's normal item handler. The close button hides the watcher and updates its Options checkbox; `/ef watch` or Options restores it during an active session. Middle-click and drag to move it.
 
-The watcher stays visible while a fishing session is active, then hides when you move away or after two minutes without another cast. Statistics refreshes while open and includes the current session's fishing time without adding it to saved totals twice. It shows sessions, casts, time fishing, skill gains, items caught, per-zone activity, top catches, and catch rate. Catch-rate tracking begins with casts observed after installing this update; older lifetime cast totals are preserved but excluded from the rate. Only items observed in Forever Fishing loot are counted.
+The watcher stays visible during a fishing session and for a two-minute idle grace period after moving or stopping casts. Its session timer freezes while idle. Removing the fishing pole ends the session immediately. Statistics refreshes while open and includes the current session's fishing time without adding it to saved totals twice. It shows sessions, casts, time fishing, skill gains, items caught, per-zone activity, top catches, and catch rate. Catch-rate tracking begins with casts observed after installing this update; older lifetime cast totals are preserved but excluded from the rate. Only items observed in Forever Fishing loot are counted.
 
 ### 🗺️ Fishing Locations
 The Locations tab records fish caught by zone, area, approximate map coordinates, and broad server-time ranges. Search by zone, area, fish name, or item ID; filter by zone or Favorites; expand an area to see its recorded locations. Left-click a location to set a Blizzard map waypoint; when TomTom is installed, EasyFishing also adds a transient TomTom marker and arrow. TomTom is an optional dependency; native waypoints work without it. Right-click a location to rename it, and use **Import / Export** to copy or merge saved locations between characters. Catches within 15 yards are combined into one location. This is a personal catch history, not a prefilled habitat list or a verified map of fishing-pool boundaries.
@@ -134,7 +134,7 @@ Fishing spell, lure, gear, campsite, reward, and NPC reference data are maintain
 
 ## In-game checks
 
-After updating the addon on the Forever client, enable Lua errors (`/console scriptErrors 1`) and reload the UI. With a pole equipped and no target selected:
+After updating the addon on the Forever client, enable Lua errors (`/console scriptErrors 1`) and reload the UI. With a pole equipped and while standing still:
 
 1. Try both click patterns on the world and confirm that UI clicks, combat, movement, and clicks on units do not cast. Confirm that a lure is applied only when the pole has no lure.
 2. Start and stop fishing with sound automation enabled. Verify that Master Sound, Sound Effects, and Background Sound return to their previous values after stopping, moving, and `/reload`.
@@ -152,7 +152,9 @@ Prioritize a complete fishing workflow over a long feature checklist: reliable c
 ## UI Conventions
 
 - Use Blizzard's dialog artwork for tool windows and dialogs, and tooltip artwork for compact overlays. Main and transfer windows share the same backdrop styling.
+- Use the untinted Blizzard DialogFrame background and border for tool windows so their surface matches native WoW dialogs.
 - Use native GameFont styles, buttons, checkboxes, dropdowns, sliders, scrollbars, item icons, and GameTooltip. Gold identifies headings and important values; neutral surfaces keep lists readable.
+- Keep page headers aligned to a 640px content rule. Legacy UIPanel scroll frames use a 620px frame and 600px scroll child to reserve the external scrollbar gutter; widen row content only within that child.
 - Keep feature tools in the fishing window and preferences in Blizzard Options. Preserve Escape-to-close, predictable tab navigation, and saved window positions.
 - Keep dependencies optional and purposeful. Ace libraries are not required for this design. Consider AceDB-3.0 if account/character settings grow into selectable profiles. The launcher integrates with LibDataBroker-1.1 and LibDBIcon-1.0 when already loaded; neither is bundled or required. AceGUI and AceConfig are not needed merely to make native controls look polished.
 

@@ -422,7 +422,8 @@ local function UpdateFishWatcher()
     fishWatcherStatus:SetText(paused and "Paused" or (InCombatLockdown() and "In combat"
         or (isFishing and "Fishing" or (EF.IsLootOpen() and "Looting" or "Idle"))))
     fishWatcherStatus:SetTextColor(paused and 0.6 or 1, paused and 0.6 or 1, paused and 0.6 or 1)
-    local elapsedSeconds = math.max(1, GetTime() - fishingSession.startedAt)
+    local sessionEnd = isFishing and GetTime() or (fishingSession.lastActivityAt or GetTime())
+    local elapsedSeconds = math.max(1, sessionEnd - fishingSession.startedAt)
     local itemsPerHour = fishingSession.totalItems * 3600 / elapsedSeconds
     local fishingSkill = EF.GetFishingSkill()
     fishWatcherMetricValues[1]:SetText(fishingSkill and tostring(fishingSkill) or "?")
@@ -639,6 +640,7 @@ local soundFrame = CreateFrame("Frame")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
 soundFrame:RegisterEvent("PLAYER_STARTED_MOVING")
+soundFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 soundFrame:RegisterEvent("PLAYER_LOGOUT")
 soundFrame:RegisterEvent("LOOT_OPENED")
 soundFrame:RegisterEvent("LOOT_READY")
@@ -695,12 +697,20 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
     elseif event == "LOOT_OPENED" or event == "LOOT_READY" then
         RecordFishingLoot()
         return
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+        if fishingSession and not EF.IsFishingPoleEquipped() then
+            isFishing = false
+            RestoreFishingSoundSettings()
+            EndFishingSession()
+        end
+        return
     elseif event == "PLAYER_STARTED_MOVING" then
         if fishingSession then
             fishingSession.lastActivityAt = GetTime()
             isFishing = false
             RestoreFishingSoundSettings()
-            EndFishingSession()
+            UpdateFishWatcher()
+            ScheduleFishingSessionEnd()
         end
         return
     elseif event == "SKILL_LINES_CHANGED" or event == "CHAT_MSG_SKILL" then

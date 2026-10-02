@@ -221,6 +221,18 @@ local function SetTomTomWaypoint(spot, label)
     return true
 end
 
+local function OpenFishingMap(mapID)
+    if not WorldMapFrame then return end
+    if type(WorldMapFrame.SetMapID) == "function" then
+        WorldMapFrame:SetMapID(mapID)
+    end
+    if type(ShowUIPanel) == "function" then
+        ShowUIPanel(WorldMapFrame)
+    else
+        WorldMapFrame:Show()
+    end
+end
+
 local function ShareFishingLocation()
     local spot = EF.GetCharacterDB().lastFishingSpot
     if not spot then
@@ -268,6 +280,7 @@ function EF.SetFishingWaypoint(spot, label)
     if native and C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
         C_SuperTrack.SetSuperTrackedUserWaypoint(true)
     end
+    OpenFishingMap(spot.mapID)
     return true
 end
 
@@ -444,7 +457,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
         EF.OpenWindow = OpenFishingWindow
 
-        local PAGE_CONTENT_WIDTH = 620
+        local PAGE_CONTENT_WIDTH = 640
+        local SCROLL_FRAME_WIDTH = 620
+        local SCROLL_CONTENT_WIDTH = SCROLL_FRAME_WIDTH - 20
 
         local function PageHeader(page, text)
             local title = page:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -1042,9 +1057,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local locationsScroll = CreateFrame("ScrollFrame", "EasyFishingAtlasScrollFrame",
             locationsPage, "UIPanelScrollFrameTemplate")
         locationsScroll:SetPoint("TOPLEFT", locationsDivider, "BOTTOMLEFT", 0, -68)
-        locationsScroll:SetSize(PAGE_CONTENT_WIDTH, 420)
+        locationsScroll:SetSize(SCROLL_FRAME_WIDTH, 420)
         local locationsContent = CreateFrame("Frame", nil, locationsScroll)
-        locationsContent:SetSize(590, 1)
+        locationsContent:SetSize(SCROLL_CONTENT_WIDTH, 1)
         locationsScroll:SetScrollChild(locationsContent)
         local RefreshLocationsPage
         local OpenLocationTransfer
@@ -1668,7 +1683,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
                     row.catchLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                     row.catchLabel:SetPoint("TOPLEFT", row.areaLabel, "BOTTOMLEFT", 0, -2)
-                    row.catchLabel:SetWidth(556)
+                    row.catchLabel:SetWidth(576)
                     row.catchLabel:SetJustifyH("LEFT")
                     row.catchLabel:SetTextColor(0.82, 0.84, 0.82)
                     row.catchLabel:SetWordWrap(false)
@@ -1676,7 +1691,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end
                 row:ClearAllPoints()
                 local isNestedSpot = entry.kind == "spot" and entry.index ~= nil
-                row:SetSize(isNestedSpot and 568 or 580, 50)
+                row:SetSize(isNestedSpot and 588 or 600, 50)
                 row:SetPoint("TOPLEFT", locationsContent, "TOPLEFT", isNestedSpot and 12 or 0,
                     -((index - 1) * 54))
                 if entry.kind == "area" then
@@ -1713,33 +1728,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                         RefreshLocationsPage(currentScroll)
                         return
                     end
-                    local nativeWaypointSet = false
-                    if C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
-                        and UiMapPoint and UiMapPoint.CreateFromCoordinates
-                        and C_Map.CanSetUserWaypointOnMap(spot.mapID) then
-                        local point = UiMapPoint.CreateFromCoordinates(spot.mapID, spot.x, spot.y)
-                        nativeWaypointSet = point and C_Map.SetUserWaypoint(point) or false
-                    end
                     local locationLabel = areaLabel
                         .. (entry.index and (" / Location " .. entry.index) or "")
-                    local tomTomWaypointSet = SetTomTomWaypoint(spot, locationLabel)
-                    if not nativeWaypointSet and not tomTomWaypointSet then
-                        print("EasyFishing: neither the map nor TomTom can set a waypoint here.")
-                        return
-                    end
-                    characterDB.lastFishingSpot = {
-                        mapID = spot.mapID,
-                        x = spot.x,
-                        y = spot.y,
-                        label = locationLabel,
-                    }
-                    if nativeWaypointSet and C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
-                        C_SuperTrack.SetSuperTrackedUserWaypoint(true)
-                    end
-                    if nativeWaypointSet and WorldMapFrame and WorldMapFrame.SetMapID then
-                        WorldMapFrame:SetMapID(spot.mapID)
-                        if ShowUIPanel then ShowUIPanel(WorldMapFrame) else WorldMapFrame:Show() end
-                    end
+                    EF.SetFishingWaypoint(spot, locationLabel)
                 end)
                 row:SetScript("OnEnter", function(self)
                     SetBackdropColors(self, UI_COLORS.spotHover, UI_COLORS.hoverBorder)
@@ -1818,7 +1809,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         trainingScroll:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 0, -12)
         trainingScroll:SetPoint("BOTTOMRIGHT", guidePage, "BOTTOMRIGHT", -36, 60)
         local guideTrainingView = CreateFrame("Frame", nil, trainingScroll)
-        guideTrainingView:SetSize(PAGE_CONTENT_WIDTH, 380)
+        guideTrainingView:SetSize(SCROLL_CONTENT_WIDTH, 380)
         trainingScroll:SetScrollChild(guideTrainingView)
 
         local guideTrainersDivider = PageHeader(guideTrainersPage, "Fishing NPCs")
@@ -2141,29 +2132,31 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         trainerHeaderName:SetText("NPC / Role")
 
         local trainerHeaderSide = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderSide:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 170, 0)
+        trainerHeaderSide:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 160, 0)
+        trainerHeaderSide:SetWidth(72)
         trainerHeaderSide:SetText("Faction")
 
         local trainerHeaderLocation = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderLocation:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 242, 0)
+        trainerHeaderLocation:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 238, 0)
+        trainerHeaderLocation:SetWidth(198)
         trainerHeaderLocation:SetText("Town / Zone")
 
         local trainerHeaderCoordinates = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderCoordinates:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 416, 0)
-        trainerHeaderCoordinates:SetWidth(78)
+        trainerHeaderCoordinates:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 442, 0)
+        trainerHeaderCoordinates:SetWidth(96)
         trainerHeaderCoordinates:SetText("Coords.")
 
         local trainerHeaderWaypoint = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderWaypoint:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 500, 0)
+        trainerHeaderWaypoint:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 548, 0)
         trainerHeaderWaypoint:SetWidth(84)
         trainerHeaderWaypoint:SetText("Map")
 
         local trainerScroll = CreateFrame("ScrollFrame", "EasyFishingTrainerScrollFrame",
             guideTrainersView, "UIPanelScrollFrameTemplate")
         trainerScroll:SetPoint("TOPLEFT", trainerHeaderName, "BOTTOMLEFT", -6, -6)
-        trainerScroll:SetSize(PAGE_CONTENT_WIDTH, 300)
+        trainerScroll:SetSize(SCROLL_FRAME_WIDTH, 300)
         local trainerContent = CreateFrame("Frame", nil, trainerScroll)
-        trainerContent:SetSize(590, 1)
+        trainerContent:SetSize(SCROLL_CONTENT_WIDTH, 1)
         trainerScroll:SetScrollChild(trainerContent)
 
         local trainerEmptyText = trainerContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -2212,49 +2205,49 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local row = trainerRows[index]
                 if not row then
                     row = CreateFrame("Frame", nil, trainerContent)
-                    row:SetSize(590, 38)
+                    row:SetSize(640, 38)
 
                     row.background = row:CreateTexture(nil, "BACKGROUND")
                     row.background:SetAllPoints(row)
 
                     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -3)
-                    row.name:SetWidth(155)
+                    row.name:SetWidth(148)
                     row.name:SetJustifyH("LEFT")
                     row.name:SetWordWrap(false)
 
                     row.role = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                     row.role:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
-                    row.role:SetWidth(155)
+                    row.role:SetWidth(148)
                     row.role:SetJustifyH("LEFT")
                     row.role:SetTextColor(0.72, 0.72, 0.72)
 
                     row.side = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.side:SetPoint("TOPLEFT", row, "TOPLEFT", 170, -12)
-                    row.side:SetWidth(66)
+                    row.side:SetPoint("TOPLEFT", row, "TOPLEFT", 160, -12)
+                    row.side:SetWidth(72)
                     row.side:SetJustifyH("LEFT")
 
                     row.location = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.location:SetPoint("TOPLEFT", row, "TOPLEFT", 242, -3)
-                    row.location:SetWidth(168)
+                    row.location:SetPoint("TOPLEFT", row, "TOPLEFT", 238, -3)
+                    row.location:SetWidth(198)
                     row.location:SetJustifyH("LEFT")
                     row.location:SetWordWrap(false)
 
                     row.zone = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                     row.zone:SetPoint("TOPLEFT", row.location, "BOTTOMLEFT", 0, -1)
-                    row.zone:SetWidth(168)
+                    row.zone:SetWidth(198)
                     row.zone:SetJustifyH("LEFT")
                     row.zone:SetTextColor(0.72, 0.72, 0.72)
                     row.zone:SetWordWrap(false)
 
                     row.coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.coordinates:SetPoint("TOPLEFT", row, "TOPLEFT", 416, -12)
-                    row.coordinates:SetWidth(78)
+                    row.coordinates:SetPoint("TOPLEFT", row, "TOPLEFT", 442, -12)
+                    row.coordinates:SetWidth(96)
                     row.coordinates:SetJustifyH("RIGHT")
 
                     row.waypointButton = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                     row.waypointButton:SetSize(84, 22)
-                    row.waypointButton:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, -8)
+                    row.waypointButton:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -8)
                     trainerRows[index] = row
                 end
 
@@ -2273,6 +2266,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end
                 row.location:SetText(trainer.location and trainer.location ~= ""
                     and trainer.location or trainer.zone)
+                row:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText(trainer.location or trainer.zone)
+                    if trainer.location then GameTooltip:AddLine(trainer.zone, 0.75, 0.75, 0.75) end
+                    GameTooltip:Show()
+                end)
+                row:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 row.zone:SetText(trainer.location and trainer.location ~= "" and trainer.zone or "")
                 row.coordinates:SetText(trainer.x and trainer.y
                     and string.format("%.1f, %.1f", trainer.x, trainer.y) or "Not listed")
@@ -2286,26 +2286,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.waypointButton:Enable()
                     row.waypointButton:SetScript("OnClick", function()
                         local x, y = npc.x / 100, npc.y / 100
-                        local nativeWaypointSet = false
-                        if C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
-                            and UiMapPoint and UiMapPoint.CreateFromCoordinates
-                            and C_Map.CanSetUserWaypointOnMap(npc.mapID) then
-                            local point = UiMapPoint.CreateFromCoordinates(npc.mapID, x, y)
-                            nativeWaypointSet = point and C_Map.SetUserWaypoint(point) or false
-                        end
                         local label = npc.name .. " - " .. (npc.location or npc.zone)
-                        local tomTomWaypointSet = SetTomTomWaypoint({
+                        EF.SetFishingWaypoint({
                             mapID = npc.mapID,
                             x = x,
                             y = y,
                         }, label)
-                        if nativeWaypointSet and C_SuperTrack
-                            and C_SuperTrack.SetSuperTrackedUserWaypoint then
-                            C_SuperTrack.SetSuperTrackedUserWaypoint(true)
-                        end
-                        if not nativeWaypointSet and not tomTomWaypointSet then
-                            print("EasyFishing: neither the map nor TomTom can set this NPC waypoint.")
-                        end
                     end)
                     row.waypointButton:SetScript("OnEnter", function(button)
                         GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
@@ -2408,7 +2394,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local isComplete = skill and skill >= row.rank.maximumSkill and not isCurrent
                 local progress = skill and math.max(0, math.min(1,
                     (skill - row.rank.minimumSkill) / (row.rank.maximumSkill - row.rank.minimumSkill))) or 0
-                row.progress:SetWidth(math.max(2, 292 * progress))
+                row.progress:SetWidth(math.max(2, 312 * progress))
                 if isCurrent then
                     row.status:Show()
                     row.title:SetTextColor(1, 0.82, 0)

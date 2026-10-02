@@ -143,15 +143,22 @@ local function IsFishingChannelActive()
 end
 
 local function IsMouseOverWorld()
+    if type(GetMouseFoci) == "function" then
+        local foci = GetMouseFoci()
+        if type(foci) == "table" and #foci > 0 then
+            return foci[1] == WorldFrame
+        end
+    end
+    if WorldFrame and type(WorldFrame.IsMouseMotionFocus) == "function"
+        and WorldFrame:IsMouseMotionFocus() then
+        return true
+    end
     if type(GetMouseFocus) == "function" then
         return GetMouseFocus() == WorldFrame
     end
-    if type(GetMouseFoci) == "function" then
-        local foci = GetMouseFoci()
-        return type(foci) == "table" and #foci == 1 and foci[1] == WorldFrame
-    end
     return false
 end
+
 
 local function GetFishingSkill()
     if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
@@ -470,7 +477,7 @@ local GetMouseFishingStatus
 autoLureButton:SetScript("PreClick", function(self)
     clickDiagnostics.securePreClicks = clickDiagnostics.securePreClicks + 1
     if InCombatLockdown() then return end
-    if not CanStartFishing() or not IsMouseOverWorld() or UnitExists("mouseover") or UnitExists("target") then
+    if not CanStartFishing() or not IsMouseOverWorld() or UnitExists("mouseover") then
         clickDiagnostics.lastBlocker = "Secure click rejected: " .. GetMouseFishingStatus()
         self:SetAttribute("type", nil)
         ClearBinding()
@@ -527,7 +534,6 @@ GetMouseFishingStatus = function()
         return "A spell is already being cast or channeled."
     end
     if GetUnitSpeed("player") > 0 then return "Stand still to cast." end
-    if UnitExists("target") then return "Clear your selected target to cast." end
     if UnitExists("mouseover") then return "Move the cursor away from units to cast." end
     if not IsMouseOverWorld() then return "Move the cursor over the game world, not a UI control." end
     local lureID = GetAutoLureID()
@@ -574,11 +580,26 @@ EF.CanStartFishing = CanStartFishing
 EF.GetLureStatus = GetLureStatus
 EF.GetMouseFishingStatus = GetMouseFishingStatus
 EF.GetClickDiagnostics = function()
-    return string.format("Mouse down/up: %d/%d  |  armed: %d  |  expired: %d  |  secure pre/ready/post: %d/%d/%d\nLast click: %s",
+    local legacyFocus = type(GetMouseFocus) == "function" and GetMouseFocus()
+    local foci = type(GetMouseFoci) == "function" and GetMouseFoci() or {}
+    local focusNames = {}
+    if type(foci) == "table" then
+        for index = 1, math.min(#foci, 4) do
+            local frame = foci[index]
+            local name = frame and type(frame.GetName) == "function" and frame:GetName()
+            table.insert(focusNames, name or "unnamed")
+        end
+    end
+    local legacyName = legacyFocus and type(legacyFocus.GetName) == "function"
+        and legacyFocus:GetName() or nil
+    local worldMotionFocus = WorldFrame and type(WorldFrame.IsMouseMotionFocus) == "function"
+        and tostring(WorldFrame:IsMouseMotionFocus()) or "unavailable"
+    return string.format("Mouse down/up: %d/%d  |  armed: %d  |  expired: %d  |  secure pre/ready/post: %d/%d/%d\nLast click: %s\nFocus: legacy=%s  stack=%s  world-motion=%s",
         clickDiagnostics.mouseDowns, clickDiagnostics.mouseUps, clickDiagnostics.bindingsArmed,
         clickDiagnostics.bindingsExpired, clickDiagnostics.securePreClicks,
         clickDiagnostics.secureReadyClicks, clickDiagnostics.securePostClicks,
-        clickDiagnostics.lastBlocker)
+        clickDiagnostics.lastBlocker, legacyName or "none",
+        #focusNames > 0 and table.concat(focusNames, ",") or "empty", worldMotionFocus)
 end
 EF.UpdateKeyboardCastAction = UpdateKeyboardCastAction
 _G.BINDING_HEADER_EASYFISHING = "EasyFishing: Forever"
@@ -587,6 +608,9 @@ EF.SetDoubleClickDelay = function(value) MAX_DOUBLE_CLICK = value end
 EF.GetDoubleClickDelay = function() return MAX_DOUBLE_CLICK end
 
 function EF.InitializeClickHandling()
+    if WorldFrame and type(WorldFrame.EnableMouseMotion) == "function" then
+        WorldFrame:EnableMouseMotion(true)
+    end
     local clickFrame = CreateFrame("Frame")
     clickFrame:RegisterEvent("GLOBAL_MOUSE_DOWN")
     clickFrame:RegisterEvent("GLOBAL_MOUSE_UP")
@@ -651,7 +675,6 @@ function EF.InitializeClickHandling()
                 or not IsFishingPoleEquipped()
                 or not IsMouseOverWorld()
                 or UnitExists("mouseover")
-                or UnitExists("target")
                 or GetUnitSpeed("player") > 0 then
                 ClearBinding()
                 return
@@ -677,7 +700,6 @@ function EF.InitializeClickHandling()
             or not IsFishingPoleEquipped()
             or not IsMouseOverWorld()
             or UnitExists("mouseover")
-            or UnitExists("target")
             or GetUnitSpeed("player") > 0 then
             if lastClickTime > 0 then
                 ClearBinding()
