@@ -137,17 +137,17 @@ The coin can be exchanged for one of these items: Hook of the Master Angler, Sur
 
 The guide lists these Fishing recipes for camp objects:
 
-| Recipe | Minimum Fishing skill | Source |
+| Recipe | Minimum skill to craft | Recipe source and reagents |
 |---|---:|---|
-| Fish Bowl | 20 | Trainer |
+| Fish Bowl | 20 | Trainer; Raw Brilliant Smallfish + Empty Vial |
 | Fishing Rack | 140 | Blueprint: Fishing Rack |
 | Fishing Hut | 300 | Blueprint: Fishing Hut |
 
 These objects can be placed at campsites. The Wowhead camping guide documents their Fishing benefits as follows:
 
-- Fish Bowl: grants 8% increased stats.
-- Fishing Rack: provides Fishing-skill lures and allows uncommon fish catches for 1 hour; the campsite Fishing benefit includes 8% increased stats.
-- Fishing Hut: provides Fishing-skill lures and allows rare fish catches for 1 hour; the campsite Fishing benefit includes 8% increased stats.
+- Fish Bowl: requires Fishing 20 to craft and to use. It needs a nearby campfire and gives nearby players 8% increased stats, which does not stack with Blessing of Kings. It shares a 1-hour cooldown with all campsite features.
+- Fishing Rack: requires Fishing 140 to craft and use; its blueprint is the recipe source. It provides Fishing-skill lures, allows uncommon fish catches for 1 hour, and includes the Fish Bowl benefit. It needs a nearby campfire and can replace a Fish Bowl; campsite features share a 1-hour cooldown.
+- Fishing Hut: requires Fishing 300 to craft and use; its blueprint is the recipe source. It provides Fishing-skill lures, allows rare fish catches for 1 hour, and includes the Fish Bowl benefit. It needs a nearby campfire and can replace a Fish Bowl; campsite features share a 1-hour cooldown.
 
 Camping is described as a new crafting system alongside professions. The guide says a character receives The Great Outdoors around level 5, learns to craft a Basic Campfire through Cooking, and receives profession 101 quests from trained professions. A Basic Campfire supports three placed items, though a player can place only one item themselves at this stage.
 
@@ -156,6 +156,9 @@ Camping is described as a new crafting system alongside professions. The guide s
 - [Wowhead: Fishing Profession Overview in Forever](https://www.wowhead.com/forever/guide/professions/fishing/overview-leveling) - guide sections include training, leveling, boosts, tournament, and recipes; updated 2026-09-29; labeled Patch 1.60.1.
 - [Wowhead: Fishing guide changelog](https://www.wowhead.com/forever/guide/changelog?id=34923) - linked from the guide; check for later edits.
 - [Wowhead: Camping Overview in Forever](https://www.wowhead.com/forever/guide/camping-overview-unlock-rewards) - camping unlock and profession campsite effects; updated 2026-09-22; labeled Patch 1.60.1.
+- [Wowhead: Fish Bowl item](https://www.wowhead.com/forever/item=279967/fish-bowl) - item requirements, effect, cooldown, and recipe reagents; accessed 2026-10-02.
+- [Wowhead: Fishing Rack item](https://www.wowhead.com/forever/item=279965/fishing-rack) - use requirement, fishing effects, campfire requirement, and shared cooldown; accessed 2026-10-02.
+- [Wowhead: Fishing Hut item](https://www.wowhead.com/forever/item=279966/fishing-hut) - use requirement, fishing effects, campfire requirement, and shared cooldown; accessed 2026-10-02.
 - [Wowhead: Camping guide changelog](https://www.wowhead.com/forever/guide/changelog?id=34796) - linked from the camping guide; check for later edits.
 
 2026-10-02: Reviewed the Wowhead fishing and camping guides and recorded their Forever-specific claims. Primary Blizzard patch notes and the three hidden Artisan quest map points remain unverified.

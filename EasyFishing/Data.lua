@@ -11,12 +11,36 @@ EasyFishing.Data = {
     },
     FISHING_SPELL_IDS = { 7620, 131474 },
     LURES = {
-        { id = 6529, minimumSkill = 1 },
-        { id = 6530, minimumSkill = 50 },
-        { id = 6811, minimumSkill = 50 },
-        { id = 6532, minimumSkill = 100 },
-        { id = 7307, minimumSkill = 100 },
-        { id = 6533, minimumSkill = 100 },
+        { id = 6529, name = "Shiny Bauble", bonus = 25, minimumSkill = 1 },
+        { id = 6530, name = "Nightcrawlers", bonus = 50, minimumSkill = 50 },
+        { id = 6811, name = "Aquadynamic Fish Lens", bonus = 50, minimumSkill = 50 },
+        { id = 6532, name = "Bright Baubles", bonus = 75, minimumSkill = 100 },
+        { id = 7307, name = "Flesh Eating Worm", bonus = 75, minimumSkill = 100 },
+        { id = 6533, name = "Aquadynamic Fish Attractor", bonus = 100, minimumSkill = 100 },
+    },
+    FISHING_CAMP_ITEMS = {
+        {
+            id = 279967,
+            name = "Fish Bowl",
+            craftSkill = 20,
+            source = "Trainer",
+            details = "Requires Fishing 20 to use and a nearby campfire. Grants nearby players +8% stats; does not stack with Blessing of Kings. Shares the 1-hour campsite cooldown.",
+            recipe = "Raw Brilliant Smallfish + Empty Vial",
+        },
+        {
+            id = 279965,
+            name = "Fishing Rack",
+            craftSkill = 140,
+            source = "Blueprint",
+            details = "Requires Fishing 140 to use and a nearby campfire. Allows uncommon fish and provides Fishing lures for 1 hour. Includes Fish Bowl effects and may replace a Fish Bowl. Shares the 1-hour campsite cooldown.",
+        },
+        {
+            id = 279966,
+            name = "Fishing Hut",
+            craftSkill = 300,
+            source = "Blueprint",
+            details = "Requires Fishing 300 to use and a nearby campfire. Allows rare fish and provides Fishing lures for 1 hour. Includes Fish Bowl effects and may replace a Fish Bowl. Shares the 1-hour campsite cooldown.",
+        },
     },
     FISHING_RANKS = {
         {

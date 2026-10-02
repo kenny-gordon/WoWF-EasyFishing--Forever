@@ -34,6 +34,25 @@ local function GetItemHyperlink(itemID)
     end
 end
 
+local function GetOwnedItemCount(itemID)
+    if C_Item and C_Item.GetItemCount then
+        return C_Item.GetItemCount(itemID) or 0
+    elseif type(GetItemCount) == "function" then
+        return GetItemCount(itemID) or 0
+    end
+    return 0
+end
+
+local function GetItemTexture(itemID)
+    local _, _, _, _, icon
+    if C_Item and C_Item.GetItemInfoInstant then
+        _, _, _, _, icon = C_Item.GetItemInfoInstant(itemID)
+    elseif type(GetItemInfoInstant) == "function" then
+        _, _, _, _, icon = GetItemInfoInstant(itemID)
+    end
+    return icon
+end
+
 local function ShareLastFish()
     local stats = EF.EnsureFishingStats()
     if not stats.lastCatchItemLink then
@@ -445,7 +464,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local metricLabels = { "Items Caught", "Casts", "Fishing Time", "Skill Gains" }
         for index, labelText in ipairs(metricLabels) do
             local xOffset = (index - 1) * 150
-            local label = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            local label = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
             label:SetPoint("TOPLEFT", statisticsDivider, "BOTTOMLEFT", xOffset, -14)
             label:SetWidth(145)
             label:SetJustifyH("LEFT")
@@ -460,38 +479,48 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             metricValues[index] = value
         end
 
-        local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         statisticsSummary:SetPoint("TOPLEFT", metricValues[1], "BOTTOMLEFT", 0, -4)
         statisticsSummary:SetWidth(PAGE_CONTENT_WIDTH)
         statisticsSummary:SetJustifyH("LEFT")
 
         local statisticsCaveat = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        statisticsCaveat:SetPoint("TOPLEFT", statisticsSummary, "BOTTOMLEFT", 0, -4)
-        statisticsCaveat:SetWidth(PAGE_CONTENT_WIDTH)
+        statisticsCaveat:SetPoint("BOTTOMLEFT", statisticsPage, "BOTTOMLEFT", 16, 18)
+        statisticsCaveat:SetWidth(PAGE_CONTENT_WIDTH - 32)
         statisticsCaveat:SetWordWrap(true)
         statisticsCaveat:SetText("Only items shown in the client's Fishing loot window are counted.")
 
         local zoneStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        zoneStatsTitle:SetPoint("TOPLEFT", statisticsCaveat, "BOTTOMLEFT", 0, -18)
+        zoneStatsTitle:SetPoint("TOPLEFT", statisticsSummary, "BOTTOMLEFT", 0, -24)
         zoneStatsTitle:SetText("Items by Zone")
 
-        local zoneStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        zoneStatsText:SetPoint("TOPLEFT", zoneStatsTitle, "BOTTOMLEFT", 0, -6)
-        zoneStatsText:SetWidth(300)
-        zoneStatsText:SetJustifyH("LEFT")
-        zoneStatsText:SetWordWrap(true)
+        local zoneStatsList = CreateFrame("Frame", nil, statisticsPage)
+        zoneStatsList:SetPoint("TOPLEFT", zoneStatsTitle, "BOTTOMLEFT", 0, -10)
+        zoneStatsList:SetSize(300, 300)
+
+        local zoneStatsEmpty = zoneStatsList:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        zoneStatsEmpty:SetPoint("TOPLEFT", zoneStatsList, "TOPLEFT", 0, 0)
+        zoneStatsEmpty:SetText("No zone totals recorded yet.")
+        local zoneStatsRows = {}
+        local zoneStatsMore = zoneStatsList:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        zoneStatsMore:SetWidth(292)
 
         local itemStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         itemStatsTitle:SetPoint("TOPLEFT", zoneStatsTitle, "TOPLEFT", 310, 0)
         itemStatsTitle:SetText("Top Catches")
 
-        local itemStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        itemStatsText:SetPoint("TOPLEFT", itemStatsTitle, "BOTTOMLEFT", 0, -6)
-        itemStatsText:SetWidth(300)
-        itemStatsText:SetJustifyH("LEFT")
-        itemStatsText:SetWordWrap(true)
+        local itemStatsList = CreateFrame("Frame", nil, statisticsPage)
+        itemStatsList:SetPoint("TOPLEFT", itemStatsTitle, "BOTTOMLEFT", 0, -10)
+        itemStatsList:SetSize(300, 300)
 
-        local function BuildStatsLines(items, emptyText, limit, formatEntry)
+        local itemStatsEmpty = itemStatsList:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        itemStatsEmpty:SetPoint("TOPLEFT", itemStatsList, "TOPLEFT", 0, 0)
+        itemStatsEmpty:SetText("No catches recorded yet.")
+        local itemStatsRows = {}
+        local itemStatsMore = itemStatsList:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        itemStatsMore:SetWidth(292)
+
+        local function BuildStatsEntries(items, limit)
             local entries = {}
             for name, data in pairs(items) do
                 if type(data) == "table" then
@@ -509,20 +538,81 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 return first.count > second.count
             end)
 
-            if #entries == 0 then return emptyText end
+            local moreCount = math.max(0, #entries - limit)
+            for index = #entries, limit + 1, -1 do
+                entries[index] = nil
+            end
+            return entries, moreCount
+        end
 
-            local lines = {}
-            for index = 1, math.min(#entries, limit) do
-                if formatEntry then
-                    lines[index] = formatEntry(entries[index])
-                else
-                    lines[index] = string.format("%s: %d items", entries[index].name, entries[index].count)
+        local function CreateStatisticsRow(parent)
+            local row = CreateFrame("Frame", nil, parent)
+            row:SetSize(300, 48)
+
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
+            row.name:SetWidth(190)
+            row.name:SetJustifyH("LEFT")
+            row.name:SetWordWrap(false)
+
+            row.value = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.value:SetPoint("TOPRIGHT", row, "TOPRIGHT", -2, -2)
+            row.value:SetWidth(100)
+            row.value:SetJustifyH("RIGHT")
+            row.value:SetTextColor(1, 0.82, 0)
+
+            row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
+            row.detail:SetWidth(292)
+            row.detail:SetJustifyH("LEFT")
+
+            row.barBack = row:CreateTexture(nil, "BACKGROUND")
+            row.barBack:SetColorTexture(0.22, 0.19, 0.12, 0.65)
+            row.barBack:SetSize(292, 3)
+            row.barBack:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+
+            row.bar = row:CreateTexture(nil, "ARTWORK")
+            row.bar:SetColorTexture(0.85, 0.62, 0.18, 0.9)
+            row.bar:SetSize(2, 3)
+            row.bar:SetPoint("BOTTOMLEFT", row.barBack, "BOTTOMLEFT", 0, 0)
+            return row
+        end
+
+        local function RenderStatisticsRows(parent, rows, emptyText, moreText,
+            entries, moreCount, maxCount, formatValue, formatDetail)
+            if #entries == 0 then
+                emptyText:Show()
+                moreText:Hide()
+                for _, row in ipairs(rows) do row:Hide() end
+                return
+            end
+
+            emptyText:Hide()
+            for index, entry in ipairs(entries) do
+                local row = rows[index]
+                if not row then
+                    row = CreateStatisticsRow(parent)
+                    rows[index] = row
                 end
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((index - 1) * 56))
+                row.name:SetText(entry.name)
+                row.value:SetText(formatValue(entry))
+                row.detail:SetText(formatDetail(entry))
+                row.bar:SetWidth(math.max(2, 292 * entry.count / math.max(1, maxCount)))
+                row:Show()
             end
-            if #entries > limit then
-                table.insert(lines, string.format("...and %d more", #entries - limit))
+            for index = #entries + 1, #rows do
+                rows[index]:Hide()
             end
-            return table.concat(lines, "\n")
+            if moreCount > 0 then
+                moreText:SetText(string.format("+ %d more", moreCount))
+                moreText:ClearAllPoints()
+                moreText:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -(#entries * 56))
+                moreText:Show()
+            else
+                moreText:Hide()
+            end
         end
 
         local function RefreshStatisticsPage()
@@ -536,17 +626,32 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             metricValues[3]:SetText(EF.FormatFishingTime(stats.totalFishingSeconds))
             metricValues[4]:SetText(tostring(stats.totalSkillUps))
             statisticsSummary:SetText(string.format(
-                "%d fishing sessions  |  %d zones  |  %.1f items per hour overall",
-                stats.totalSessions, zoneCount,
+                "Lifetime: %d sessions  |  %d %s  |  %.1f items per hour",
+                stats.totalSessions, zoneCount, zoneCount == 1 and "zone" or "zones",
                 stats.totalFishingSeconds > 0 and stats.totalItems * 3600 / stats.totalFishingSeconds or 0))
-            zoneStatsText:SetText(BuildStatsLines(
-                stats.zones, "No zone totals recorded yet.", 8, function(entry)
+            local zoneEntries, moreZones = BuildStatsEntries(stats.zones, 5)
+            RenderStatisticsRows(zoneStatsList, zoneStatsRows, zoneStatsEmpty, zoneStatsMore,
+                zoneEntries, moreZones, zoneEntries[1] and zoneEntries[1].count or 0,
+                function(entry)
+                    return string.format("%d items", entry.count)
+                end,
+                function(entry)
                     local zone = entry.data
-                    return string.format("%s: %d items\n  %d sessions | %d casts | %s",
-                        entry.name, entry.count, zone.sessions, zone.casts,
-                        EF.FormatFishingTime(zone.fishingSeconds))
-                end))
-            itemStatsText:SetText(BuildStatsLines(stats.itemsByID, "No items recorded yet.", 12))
+                    return string.format("%d sessions  |  %d casts  |  %s",
+                        tonumber(zone.sessions) or 0, tonumber(zone.casts) or 0,
+                        EF.FormatFishingTime(tonumber(zone.fishingSeconds) or 0))
+                end)
+
+            local itemEntries, moreItems = BuildStatsEntries(stats.itemsByID, 5)
+            RenderStatisticsRows(itemStatsList, itemStatsRows, itemStatsEmpty, itemStatsMore,
+                itemEntries, moreItems, itemEntries[1] and itemEntries[1].count or 0,
+                function(entry)
+                    return string.format("%d caught", entry.count)
+                end,
+                function(entry)
+                    local share = stats.totalItems > 0 and entry.count * 100 / stats.totalItems or 0
+                    return string.format("%.1f%% of all items", share)
+                end)
         end
 
         local locationsDivider = PageHeader(locationsPage, "Fishing Locations")
@@ -877,6 +982,17 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         guideTrainersTab:SetPoint("LEFT", guideTrainingTab, "RIGHT", 6, 0)
         guideTrainersTab:SetText("Trainer Directory")
 
+        local guideTrainingIndicator = guidePage:CreateTexture(nil, "ARTWORK")
+        guideTrainingIndicator:SetColorTexture(1, 0.82, 0, 0.9)
+        guideTrainingIndicator:SetSize(100, 2)
+        guideTrainingIndicator:SetPoint("BOTTOMLEFT", guideTrainingTab, "BOTTOMLEFT", 6, 2)
+
+        local guideTrainersIndicator = guidePage:CreateTexture(nil, "ARTWORK")
+        guideTrainersIndicator:SetColorTexture(1, 0.82, 0, 0.9)
+        guideTrainersIndicator:SetSize(116, 2)
+        guideTrainersIndicator:SetPoint("BOTTOMLEFT", guideTrainersTab, "BOTTOMLEFT", 6, 2)
+        guideTrainersIndicator:Hide()
+
         local guideTrainingView = CreateFrame("Frame", nil, guidePage)
         guideTrainingView:SetPoint("TOPLEFT", guideTrainingTab, "BOTTOMLEFT", 0, -10)
         guideTrainingView:SetSize(PAGE_CONTENT_WIDTH, 380)
@@ -899,10 +1015,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         for index, rank in ipairs(EF.Data.FISHING_RANKS) do
             local row = CreateFrame("Frame", nil, guideTrainingView)
             row.rank = rank
-            row:SetSize(300, 72)
-            row:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -8 - ((index - 1) * 74))
+            row:SetSize(300, 80)
+            row:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -8 - ((index - 1) * 82))
 
-            row.title = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+            row.title = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             row.title:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
             row.title:SetText(rank.name)
 
@@ -912,11 +1028,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.status:SetTextColor(1, 0.82, 0)
             row.status:Hide()
 
-            row.range = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            row.range = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
             row.range:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
             row.range:SetText(rank.range)
 
-            row.detail = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            row.detail = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
             row.detail:SetPoint("TOPLEFT", row.title, "BOTTOMLEFT", 0, -3)
             row.detail:SetWidth(300)
             row.detail:SetJustifyH("LEFT")
@@ -932,14 +1048,94 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             trainingRankRows[index] = row
         end
 
-        local campText = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        campText:SetPoint("TOPLEFT", campTitle, "BOTTOMLEFT", 0, -8)
-        campText:SetWidth(300)
-        campText:SetJustifyH("LEFT")
-        campText:SetWordWrap(true)
+        local lureRows = {}
+        for index, lure in ipairs(EF.Data.LURES) do
+            local row = CreateFrame("Frame", nil, guideTrainingView)
+            row.lure = lure
+            row:SetSize(300, 28)
+            row:SetPoint("TOPLEFT", campTitle, "BOTTOMLEFT", 0, -6 - ((index - 1) * 30))
+            row:EnableMouse(true)
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(24, 24)
+            row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
+            row.icon:SetTexture(GetItemTexture(lure.id) or "Interface\\Icons\\INV_Misc_QuestionMark")
+
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
+            row.name:SetWidth(185)
+            row.name:SetJustifyH("LEFT")
+            row.name:SetText(lure.name)
+
+            row.count = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.count:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
+            row.count:SetWidth(78)
+            row.count:SetJustifyH("RIGHT")
+
+            row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+            row.detail:SetText(string.format("+%d Fishing  |  Skill %d+", lure.bonus, lure.minimumSkill))
+
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(lure.name)
+                GameTooltip:AddLine(string.format("Adds %d Fishing skill", lure.bonus), 1, 1, 1)
+                GameTooltip:AddLine(string.format("Requires Fishing skill %d", lure.minimumSkill), 0.75, 0.75, 0.75)
+                GameTooltip:AddLine(string.format("In bags: %d", self.itemCount or 0), 0.75, 0.75, 0.75)
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            lureRows[index] = row
+        end
+
+        local campCraftTitle = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        campCraftTitle:SetPoint("TOPLEFT", lureRows[#lureRows], "BOTTOMLEFT", 0, -8)
+        campCraftTitle:SetTextColor(1, 0.82, 0)
+        campCraftTitle:SetText("Campsite Recipes")
+
+        local campRows = {}
+        for index, campItem in ipairs(EF.Data.FISHING_CAMP_ITEMS) do
+            local row = CreateFrame("Frame", nil, guideTrainingView)
+            row.campItem = campItem
+            row:SetSize(300, 30)
+            row:SetPoint("TOPLEFT", campCraftTitle, "BOTTOMLEFT", 0, -6 - ((index - 1) * 32))
+            row:EnableMouse(true)
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(24, 24)
+            row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
+            row.icon:SetTexture(GetItemTexture(campItem.id) or "Interface\\Icons\\INV_Misc_QuestionMark")
+
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, 0)
+            row.name:SetWidth(185)
+            row.name:SetText(campItem.name)
+
+            row.count = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.count:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+            row.count:SetWidth(78)
+            row.count:SetJustifyH("RIGHT")
+
+            row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+            row.detail:SetText(string.format("Craft skill %d  |  %s", campItem.craftSkill, campItem.source))
+
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(campItem.name)
+                GameTooltip:AddLine(campItem.details, 1, 1, 1, true)
+                if campItem.recipe then
+                    GameTooltip:AddLine("Recipe: " .. campItem.recipe, 0.75, 0.75, 0.75, true)
+                end
+                GameTooltip:AddLine(string.format("In bags: %d", self.itemCount or 0), 0.75, 0.75, 0.75)
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            campRows[index] = row
+        end
 
         local trainerFilter = "All"
-        local trainerIntro = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        local trainerIntro = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         trainerIntro:SetPoint("TOPLEFT", guideTrainersView, "TOPLEFT", 0, -4)
         trainerIntro:SetWidth(360)
         trainerIntro:SetJustifyH("LEFT")
@@ -950,29 +1146,40 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         UIDropDownMenu_SetWidth(trainerFactionDropdown, 135)
         UIDropDownMenu_SetText(trainerFactionDropdown, "All factions")
 
-        local trainerHeaderName = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        trainerHeaderName:SetPoint("TOPLEFT", trainerIntro, "BOTTOMLEFT", 6, -16)
+        local trainerSearch = CreateFrame("EditBox", nil, guideTrainersView, "SearchBoxTemplate")
+        trainerSearch:SetPoint("TOPLEFT", trainerIntro, "BOTTOMLEFT", 0, -8)
+        trainerSearch:SetSize(220, 20)
+        trainerSearch:SetAutoFocus(false)
+        trainerSearch:SetMaxLetters(40)
+
+        local trainerHeaderName = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        trainerHeaderName:SetPoint("TOPLEFT", trainerSearch, "BOTTOMLEFT", 6, -10)
         trainerHeaderName:SetText("Trainer")
 
-        local trainerHeaderSide = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        local trainerHeaderSide = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderSide:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 171, 0)
         trainerHeaderSide:SetText("Faction")
 
-        local trainerHeaderLocation = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        local trainerHeaderLocation = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderLocation:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 247, 0)
         trainerHeaderLocation:SetText("Location")
 
-        local trainerHeaderCoordinates = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        local trainerHeaderCoordinates = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderCoordinates:SetPoint("TOPRIGHT", trainerHeaderName, "TOPLEFT", 572, 0)
         trainerHeaderCoordinates:SetText("Coordinates")
 
         local trainerScroll = CreateFrame("ScrollFrame", "EasyFishingTrainerScrollFrame",
             guideTrainersView, "UIPanelScrollFrameTemplate")
         trainerScroll:SetPoint("TOPLEFT", trainerHeaderName, "BOTTOMLEFT", -6, -6)
-        trainerScroll:SetSize(PAGE_CONTENT_WIDTH, 320)
+        trainerScroll:SetSize(PAGE_CONTENT_WIDTH, 300)
         local trainerContent = CreateFrame("Frame", nil, trainerScroll)
         trainerContent:SetSize(590, 1)
         trainerScroll:SetScrollChild(trainerContent)
+
+        local trainerEmptyText = trainerContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        trainerEmptyText:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 10, -10)
+        trainerEmptyText:SetText("No trainers match. Try another search or faction.")
+        trainerEmptyText:Hide()
 
         local trainerRows = {}
         local function RefreshTrainerList()
@@ -981,9 +1188,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
             local trainers = {}
+            local query = (trainerSearch:GetText() or ""):lower():match("^%s*(.-)%s*$") or ""
             for _, trainer in ipairs(EF.Data.FISHING_TRAINERS) do
-                if trainerFilter == "All" or trainer.side == trainerFilter
-                    or (trainer.side == "Both" and trainerFilter ~= "Neutral") then
+                local matchesFaction = trainerFilter == "All" or trainer.side == trainerFilter
+                    or (trainer.side == "Both" and trainerFilter ~= "Neutral")
+                local searchText = string.lower(string.format("%s %s %s %s",
+                    trainer.name, trainer.side, trainer.location, trainer.zone))
+                if matchesFaction and (query == "" or string.find(searchText, query, 1, true)) then
                     table.insert(trainers, trainer)
                 end
             end
@@ -994,9 +1205,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 return first.zone < second.zone
             end)
 
-            trainerIntro:SetText(string.format(
-                "Showing %d trainers. Coordinates are approximate zone-map positions.", #trainers))
-            trainerContent:SetHeight(math.max(1, #trainers * 30))
+            trainerIntro:SetText(string.format("%d of %d trainers. Search by name, town, or zone.",
+                #trainers, #EF.Data.FISHING_TRAINERS))
+            trainerContent:SetHeight(math.max(30, #trainers * 30))
+            if #trainers == 0 then
+                trainerEmptyText:Show()
+            else
+                trainerEmptyText:Hide()
+            end
             trainerScroll:UpdateScrollChildRect()
             trainerScroll:SetVerticalScroll(0)
 
@@ -1009,22 +1225,22 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.background = row:CreateTexture(nil, "BACKGROUND")
                     row.background:SetAllPoints(row)
 
-                    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -7)
                     row.name:SetWidth(165)
                     row.name:SetJustifyH("LEFT")
 
-                    row.side = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.side = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.side:SetPoint("TOPLEFT", row, "TOPLEFT", 177, -7)
                     row.side:SetWidth(68)
                     row.side:SetJustifyH("LEFT")
 
-                    row.location = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.location = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.location:SetPoint("TOPLEFT", row, "TOPLEFT", 253, -7)
-                    row.location:SetWidth(210)
+                    row.location:SetWidth(225)
                     row.location:SetJustifyH("LEFT")
 
-                    row.coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.coordinates:SetPoint("TOPRIGHT", row, "TOPRIGHT", -12, -7)
                     row.coordinates:SetWidth(100)
                     row.coordinates:SetJustifyH("RIGHT")
@@ -1048,6 +1264,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 row:Show()
             end
         end
+
+        local originalSearchChanged = trainerSearch:GetScript("OnTextChanged")
+        trainerSearch:SetScript("OnTextChanged", function(self, ...)
+            if originalSearchChanged then
+                originalSearchChanged(self, ...)
+            end
+            RefreshTrainerList()
+        end)
 
         UIDropDownMenu_Initialize(trainerFactionDropdown, function()
             local options = {
@@ -1115,31 +1339,66 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end
             end
 
-            campText:SetText(table.concat({
-                "Shiny Bauble +25 (skill 1); use below 25 while fishing starter zones.",
-                "Nightcrawlers or Aquadynamic Fish Lens +50 (skill 50).",
-                "Bright Baubles or Flesh Eating Worm +75 (skill 100); Fish Attractor +100 (skill 100).",
-                "Fish Bowl: skill 20, trainer; campsite grants 8% increased stats.",
-                "Fishing Rack: skill 140, blueprint; campsite supports uncommon fish and Fishing lures for 1 hour.",
-                "Fishing Hut: skill 300, blueprint; campsite supports rare fish and Fishing lures for 1 hour.",
-            }, "\n\n"))
+            for _, row in ipairs(lureRows) do
+                local count = GetOwnedItemCount(row.lure.id)
+                local usable = skill and skill >= row.lure.minimumSkill
+                row.itemCount = count
+                row.count:SetText(string.format("In bags: %d", count))
+                row.icon:SetDesaturated(count == 0 or not usable)
+                if count > 0 and usable then
+                    row.name:SetTextColor(1, 0.82, 0)
+                    row.count:SetTextColor(0.35, 1, 0.35)
+                elseif count > 0 then
+                    row.name:SetTextColor(0.72, 0.72, 0.72)
+                    row.count:SetTextColor(0.72, 0.72, 0.72)
+                else
+                    row.name:SetTextColor(0.62, 0.62, 0.62)
+                    row.count:SetTextColor(0.62, 0.62, 0.62)
+                end
+            end
+
+            for _, row in ipairs(campRows) do
+                local count = GetOwnedItemCount(row.campItem.id)
+                row.itemCount = count
+                row.count:SetText(string.format("In bags: %d", count))
+                row.icon:SetDesaturated(count == 0)
+                if count > 0 then
+                    row.name:SetTextColor(1, 0.82, 0)
+                    row.count:SetTextColor(0.35, 1, 0.35)
+                else
+                    row.name:SetTextColor(0.72, 0.72, 0.72)
+                    row.count:SetTextColor(0.62, 0.62, 0.62)
+                end
+            end
+
+        end
+
+        local function SelectGuideView(showTrainers)
+            if showTrainers then
+                guideTrainingView:Hide()
+                guideTrainersView:Show()
+                guideTrainingIndicator:Hide()
+                guideTrainersIndicator:Show()
+                guideTrainingTab:GetFontString():SetTextColor(1, 1, 1)
+                guideTrainersTab:GetFontString():SetTextColor(1, 0.82, 0)
+            else
+                guideTrainingView:Show()
+                guideTrainersView:Hide()
+                guideTrainingIndicator:Show()
+                guideTrainersIndicator:Hide()
+                guideTrainingTab:GetFontString():SetTextColor(1, 0.82, 0)
+                guideTrainersTab:GetFontString():SetTextColor(1, 1, 1)
+            end
         end
 
         guideTrainingTab:SetScript("OnClick", function()
-            guideTrainingView:Show()
-            guideTrainersView:Hide()
-            guideTrainingTab:Disable()
-            guideTrainersTab:Enable()
+            SelectGuideView(false)
         end)
         guideTrainersTab:SetScript("OnClick", function()
-            guideTrainingView:Hide()
-            guideTrainersView:Show()
-            guideTrainingTab:Enable()
-            guideTrainersTab:Disable()
+            SelectGuideView(true)
             RefreshTrainerList()
         end)
-        guideTrainingTab:Disable()
-        guideTrainersTab:Enable()
+        SelectGuideView(false)
         RefreshTrainerList()
 
         settingsTab:SetScript("OnClick", function()
