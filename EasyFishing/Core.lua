@@ -93,6 +93,16 @@ local LURES = {
 }
 
 local function GetFishingSkill()
+    if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
+        local _, _, _, fishingIndex = GetProfessions()
+        if fishingIndex then
+            local _, _, skillLevel = GetProfessionInfo(fishingIndex)
+            if type(skillLevel) == "number" then
+                return skillLevel
+            end
+        end
+    end
+
     if not GetNumSkillLines or not GetSkillLineInfo then return nil end
 
     local fishingName = GetFishingSpellName()

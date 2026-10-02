@@ -14,7 +14,7 @@ local fishingSession = nil
 local fishingSessionEndTimer = nil
 
 local fishWatcher = CreateFrame("Frame", "EasyFishingFishWatcher", UIParent, "BackdropTemplate")
-fishWatcher:SetSize(300, 82)
+fishWatcher:SetSize(320, 110)
 fishWatcher:SetFrameStrata("MEDIUM")
 fishWatcher:SetClampedToScreen(true)
 fishWatcher:SetMovable(true)
@@ -35,22 +35,22 @@ end
 
 local fishWatcherTitle = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 fishWatcherTitle:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 10, -8)
-fishWatcherTitle:SetWidth(280)
+fishWatcherTitle:SetWidth(300)
 fishWatcherTitle:SetJustifyH("LEFT")
 
 local fishWatcherSummary = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 fishWatcherSummary:SetPoint("TOPLEFT", fishWatcherTitle, "BOTTOMLEFT", 0, -4)
-fishWatcherSummary:SetWidth(280)
+fishWatcherSummary:SetWidth(300)
 fishWatcherSummary:SetJustifyH("LEFT")
 
 local fishWatcherLastCatch = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 fishWatcherLastCatch:SetPoint("TOPLEFT", fishWatcherSummary, "BOTTOMLEFT", 0, -3)
-fishWatcherLastCatch:SetWidth(280)
+fishWatcherLastCatch:SetWidth(300)
 fishWatcherLastCatch:SetJustifyH("LEFT")
 
 local fishWatcherBreakdown = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 fishWatcherBreakdown:SetPoint("TOPLEFT", fishWatcherLastCatch, "BOTTOMLEFT", 0, -3)
-fishWatcherBreakdown:SetWidth(280)
+fishWatcherBreakdown:SetWidth(300)
 fishWatcherBreakdown:SetJustifyH("LEFT")
 fishWatcherBreakdown:SetWordWrap(true)
 
@@ -177,11 +177,14 @@ local function UpdateFishWatcher()
     local zoneStats = EnsureZoneFishingStats(stats, zoneName)
     local zoneItems = zoneStats.totalItems
     fishWatcherTitle:SetText("Fishing Watcher - " .. zoneName)
+    local elapsedSeconds = math.max(1, GetTime() - fishingSession.startedAt)
+    local itemsPerHour = fishingSession.totalItems * 3600 / elapsedSeconds
+    local fishingSkill = EF.GetFishingSkill()
     fishWatcherSummary:SetText(string.format(
-        "Time %s | Casts %d | Skill-ups %d\nSession items %d | All-time %d",
-        FormatFishingTime(GetTime() - fishingSession.startedAt),
-        fishingSession.casts, fishingSession.skillUps,
-        fishingSession.totalItems, zoneItems))
+        "Fishing skill %s | Time %s\nCasts %d | Skill-ups %d | %.1f items/hr\nSession %d items | Zone %d",
+        fishingSkill and tostring(fishingSkill) or "?",
+        FormatFishingTime(elapsedSeconds), fishingSession.casts,
+        fishingSession.skillUps, itemsPerHour, fishingSession.totalItems, zoneItems))
     fishWatcherLastCatch:SetText("Last catch: " .. (fishingSession.lastCatch or "None yet"))
     local sessionItems = {}
     for _, item in pairs(fishingSession.itemsByID) do

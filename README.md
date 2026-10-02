@@ -21,7 +21,7 @@ While a fishing pole is equipped, use the selected cast button in Single Click o
 When enabled, the first cast action with an un-lured fishing pole applies the weakest available lure your Fishing skill can use. Forever lure skill floors are respected: Shiny Bauble at 1, Nightcrawlers or Fish Lens at 50, and stronger lures at 100. Repeat the selected click pattern to cast Fishing. If a lure is already active, or none is available, the cast action casts Fishing directly.
 
 ### 🎣 Fish Watcher
-The optional watcher shows fishing time, casts, skill-ups, **items this session**, **all-time items in the current zone**, the last catch, and the top session catches. The Statistics tab shows lifetime sessions, casts, fishing time, skill-ups, recorded items, plus per-zone activity and item rankings. Loot is counted only when the Forever client identifies the loot window as fishing loot.
+The optional watcher shows Fishing skill, session time, casts, skill-ups, session items/hour, **items this session**, **all-time items in the current zone**, the last catch, and the top session catches. The Statistics tab shows lifetime sessions, casts, fishing time, skill-ups, recorded items, plus per-zone activity and item rankings. Loot is counted only when the Forever client identifies the loot window as fishing loot.
 
 ### 🗺️ Fish Atlas
 The Locations tab learns fish species by zone, approximate subzone, map coordinates, and broad server-time buckets from this character's confirmed catches. Click a recorded spot to set a world-map waypoint. This is a personal observed-catch database, not a prefilled habitat list or a verified map of fishing-pool boundaries.
