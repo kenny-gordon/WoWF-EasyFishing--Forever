@@ -37,6 +37,7 @@ local fishWatcherTitle = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontN
 fishWatcherTitle:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 10, -8)
 fishWatcherTitle:SetWidth(300)
 fishWatcherTitle:SetJustifyH("LEFT")
+fishWatcherTitle:SetWordWrap(true)
 
 local fishWatcherSummary = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 fishWatcherSummary:SetPoint("TOPLEFT", fishWatcherTitle, "BOTTOMLEFT", 0, -4)
@@ -47,6 +48,7 @@ local fishWatcherLastCatch = fishWatcher:CreateFontString(nil, "OVERLAY", "GameF
 fishWatcherLastCatch:SetPoint("TOPLEFT", fishWatcherSummary, "BOTTOMLEFT", 0, -3)
 fishWatcherLastCatch:SetWidth(300)
 fishWatcherLastCatch:SetJustifyH("LEFT")
+fishWatcherLastCatch:SetWordWrap(true)
 
 local fishWatcherBreakdown = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 fishWatcherBreakdown:SetPoint("TOPLEFT", fishWatcherLastCatch, "BOTTOMLEFT", 0, -3)
@@ -255,6 +257,11 @@ local function UpdateFishWatcher()
         table.insert(catchSummary, string.format("+%d more", #sessionItems - 2))
     end
     fishWatcherBreakdown:SetText("Items caught this session: " .. (#catchSummary > 0 and table.concat(catchSummary, ", ") or "None yet"))
+    local contentHeight = fishWatcherTitle:GetStringHeight()
+        + fishWatcherSummary:GetStringHeight()
+        + fishWatcherLastCatch:GetStringHeight()
+        + fishWatcherBreakdown:GetStringHeight() + 34
+    fishWatcher:SetHeight(math.max(110, contentHeight))
     fishWatcher:Show()
 end
 
@@ -346,7 +353,6 @@ local function RecordFishingLoot()
     local stats = EnsureFishingStats()
     local zoneName = GetRealZoneText() or "Unknown zone"
     local zoneStats = EnsureZoneFishingStats(stats, zoneName)
-    local recordedCatch = false
 
     for lootSlot = 1, GetNumLootItems() do
         local itemLink = GetLootSlotLink(lootSlot)
@@ -387,16 +393,10 @@ local function RecordFishingLoot()
             zoneStats.totalItems = zoneStats.totalItems + quantity
             fishingSession.totalItems = fishingSession.totalItems + quantity
             fishingSession.lastCatch = itemName
-                stats.lastCatchItemID = itemID
-                stats.lastCatchItemLink = itemLink
-                stats.lastCatchName = itemName
-            recordedCatch = true
+            stats.lastCatchItemID = itemID
+            stats.lastCatchItemLink = itemLink
+            stats.lastCatchName = itemName
         end
-    end
-
-    if recordedCatch and EasyFishingDB and EasyFishingDB.enableCatchAlert
-        and SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE and PlaySound then
-        PlaySound(SOUNDKIT.IG_QUEST_LIST_COMPLETE, "SFX")
     end
 
     UpdateFishWatcher()

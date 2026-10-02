@@ -13,7 +13,6 @@ local DB_DEFAULTS = {
     enableDoubleClick = true,
     enableAutoLure = true,
     enableSound = true,
-    enableCatchAlert = false,
     disableClickToMoveWhileFishing = false,
     showFishWatcher = true,
     doubleClickDelay = 0.4,

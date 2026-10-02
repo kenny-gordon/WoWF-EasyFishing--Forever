@@ -163,14 +163,21 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         guideTab:SetPoint("LEFT", locationsTab, "RIGHT", 4, 0)
         guideTab:SetText("Guide")
 
-        local title = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        title:SetPoint("TOPLEFT", 16, -16)
-        title:SetText("EasyFishing: Forever")
+        local PAGE_CONTENT_WIDTH = 620
 
-        local divider = settingsPage:CreateTexture(nil, "ARTWORK")
-        divider:SetColorTexture(0.4, 0.4, 0.4, 0.6)
-        divider:SetSize(550, 1)
-        divider:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+        local function PageHeader(page, text)
+            local title = page:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+            title:SetPoint("TOPLEFT", 16, -16)
+            title:SetText(text)
+
+            local rule = page:CreateTexture(nil, "ARTWORK")
+            rule:SetColorTexture(0.4, 0.4, 0.4, 0.6)
+            rule:SetSize(PAGE_CONTENT_WIDTH, 1)
+            rule:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+            return rule
+        end
+
+        local divider = PageHeader(settingsPage, "EasyFishing: Forever")
 
         local function SectionHeader(text, anchor, yOff)
             local fs = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -182,7 +189,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local function RightSectionHeader(text, yOff)
             local fs = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-            fs:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 270, yOff)
+            fs:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 300, yOff)
             fs:SetTextColor(1, 0.82, 0)
             fs:SetText(text)
             return fs
@@ -372,12 +379,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             "Enable Sound Automation",
             "Turns on sound (and background sound) when you start fishing, then restores your original settings when done.",
             secSound, -4, "enableSound")
-        local cbCatchAlert = MakeCheckbox(
-            "Play Catch Alert",
-            "Play a short sound when the client confirms a fishing catch.",
-            cbSound, -4, "enableCatchAlert")
 
-        local secOutfit = SectionHeader("Fishing Outfit", cbCatchAlert, -10)
+        local secOutfit = SectionHeader("Fishing Outfit", cbSound, -10)
         local outfitHint = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         outfitHint:SetPoint("TOPLEFT", secOutfit, "BOTTOMLEFT", 0, -4)
         outfitHint:SetWidth(260)
@@ -436,35 +439,35 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         restoreOutfitButton:SetText("Restore")
         restoreOutfitButton:SetScript("OnClick", RestorePreviousEquipmentSet)
 
-        local statisticsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        statisticsTitle:SetPoint("TOPLEFT", 16, -16)
-        statisticsTitle:SetText("Fishing Statistics")
+        local statisticsDivider = PageHeader(statisticsPage, "Fishing Statistics")
 
         local metricValues = {}
         local metricLabels = { "Caught items", "Casts", "Fishing time", "Skill-ups" }
         for index, labelText in ipairs(metricLabels) do
-            local xOffset = (index - 1) * 136
+            local xOffset = (index - 1) * 150
             local label = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-            label:SetPoint("TOPLEFT", statisticsTitle, "BOTTOMLEFT", xOffset, -12)
-            label:SetWidth(128)
+            label:SetPoint("TOPLEFT", statisticsDivider, "BOTTOMLEFT", xOffset, -14)
+            label:SetWidth(145)
+            label:SetJustifyH("LEFT")
             label:SetTextColor(0.76, 0.78, 0.78)
             label:SetText(labelText)
 
             local value = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
             value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
-            value:SetWidth(128)
+            value:SetWidth(145)
+            value:SetJustifyH("LEFT")
             value:SetText("0")
             metricValues[index] = value
         end
 
         local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         statisticsSummary:SetPoint("TOPLEFT", metricValues[1], "BOTTOMLEFT", 0, -4)
-        statisticsSummary:SetWidth(550)
+        statisticsSummary:SetWidth(PAGE_CONTENT_WIDTH)
         statisticsSummary:SetJustifyH("LEFT")
 
         local statisticsCaveat = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         statisticsCaveat:SetPoint("TOPLEFT", statisticsSummary, "BOTTOMLEFT", 0, -4)
-        statisticsCaveat:SetWidth(550)
+        statisticsCaveat:SetWidth(PAGE_CONTENT_WIDTH)
         statisticsCaveat:SetWordWrap(true)
         statisticsCaveat:SetText("Fishing loot is recorded only when the client identifies the loot window as fishing loot.")
 
@@ -474,17 +477,17 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local zoneStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         zoneStatsText:SetPoint("TOPLEFT", zoneStatsTitle, "BOTTOMLEFT", 0, -6)
-        zoneStatsText:SetWidth(260)
+        zoneStatsText:SetWidth(300)
         zoneStatsText:SetJustifyH("LEFT")
         zoneStatsText:SetWordWrap(true)
 
         local itemStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        itemStatsTitle:SetPoint("TOPLEFT", zoneStatsTitle, "TOPLEFT", 280, 0)
+        itemStatsTitle:SetPoint("TOPLEFT", zoneStatsTitle, "TOPLEFT", 310, 0)
         itemStatsTitle:SetText("Most Recorded Items")
 
         local itemStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         itemStatsText:SetPoint("TOPLEFT", itemStatsTitle, "BOTTOMLEFT", 0, -6)
-        itemStatsText:SetWidth(260)
+        itemStatsText:SetWidth(300)
         itemStatsText:SetJustifyH("LEFT")
         itemStatsText:SetWordWrap(true)
 
@@ -546,13 +549,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             itemStatsText:SetText(BuildStatsLines(stats.itemsByID, "No items recorded yet.", 12))
         end
 
-        local locationsTitle = locationsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        locationsTitle:SetPoint("TOPLEFT", 16, -16)
-        locationsTitle:SetText("Fish Atlas")
+        local locationsDivider = PageHeader(locationsPage, "Fish Atlas")
 
         local locationsDescription = locationsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        locationsDescription:SetPoint("TOPLEFT", locationsTitle, "BOTTOMLEFT", 0, -8)
-        locationsDescription:SetWidth(330)
+        locationsDescription:SetPoint("TOPLEFT", locationsDivider, "BOTTOMLEFT", 0, -14)
+        locationsDescription:SetWidth(400)
         locationsDescription:SetJustifyH("LEFT")
         locationsDescription:SetWordWrap(true)
         locationsDescription:SetText("Observed catches on this character, grouped by area. Click a row to place a waypoint. Locations are approximate and learned while fishing.")
@@ -560,16 +561,16 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local atlasZoneFilter = "All zones"
         local atlasZoneDropdown = CreateFrame("Frame", "EasyFishingAtlasZoneDropdown",
             locationsPage, "UIDropDownMenuTemplate")
-        atlasZoneDropdown:SetPoint("TOPRIGHT", locationsPage, "TOPRIGHT", -18, -34)
+        atlasZoneDropdown:SetPoint("TOPRIGHT", locationsDivider, "BOTTOMRIGHT", 16, -8)
         UIDropDownMenu_SetWidth(atlasZoneDropdown, 145)
         UIDropDownMenu_SetText(atlasZoneDropdown, atlasZoneFilter)
 
         local locationsScroll = CreateFrame("ScrollFrame", "EasyFishingAtlasScrollFrame",
             locationsPage, "UIPanelScrollFrameTemplate")
-        locationsScroll:SetPoint("TOPLEFT", locationsDescription, "BOTTOMLEFT", 0, -8)
-        locationsScroll:SetSize(570, 420)
+        locationsScroll:SetPoint("TOPLEFT", locationsDivider, "BOTTOMLEFT", 0, -68)
+        locationsScroll:SetSize(PAGE_CONTENT_WIDTH, 420)
         local locationsContent = CreateFrame("Frame", nil, locationsScroll)
-        locationsContent:SetSize(530, 1)
+        locationsContent:SetSize(590, 1)
         locationsScroll:SetScrollChild(locationsContent)
 
         local locationRows = {}
@@ -649,7 +650,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local row = locationRows[index]
                 if not row then
                     row = CreateFrame("Button", nil, locationsContent, "BackdropTemplate")
-                    row:SetSize(530, 50)
+                    row:SetSize(580, 50)
                     row:SetBackdrop({
                         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
                         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -663,7 +664,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
                     row.areaLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
                     row.areaLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -7)
-                    row.areaLabel:SetWidth(360)
+                    row.areaLabel:SetWidth(390)
                     row.areaLabel:SetJustifyH("LEFT")
                     row.areaLabel:SetWordWrap(false)
 
@@ -675,7 +676,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
                     row.catchLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                     row.catchLabel:SetPoint("TOPLEFT", row.areaLabel, "BOTTOMLEFT", 0, -2)
-                    row.catchLabel:SetWidth(506)
+                    row.catchLabel:SetWidth(556)
                     row.catchLabel:SetJustifyH("LEFT")
                     row.catchLabel:SetTextColor(0.82, 0.84, 0.82)
                     row.catchLabel:SetWordWrap(false)
@@ -763,13 +764,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end)
 
-        local guideTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        guideTitle:SetPoint("TOPLEFT", 16, -16)
-        guideTitle:SetText("Fishing Guide")
+        local guideDivider = PageHeader(guidePage, "Fishing Guide")
 
         local guideSkillText = guidePage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        guideSkillText:SetPoint("TOPLEFT", guideTitle, "BOTTOMLEFT", 0, -8)
-        guideSkillText:SetWidth(550)
+        guideSkillText:SetPoint("TOPLEFT", guideDivider, "BOTTOMLEFT", 0, -14)
+        guideSkillText:SetWidth(PAGE_CONTENT_WIDTH)
         guideSkillText:SetJustifyH("LEFT")
         guideSkillText:SetWordWrap(true)
 
@@ -780,24 +779,24 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local trainingText = guidePage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         trainingText:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -6)
-        trainingText:SetWidth(265)
+        trainingText:SetWidth(300)
         trainingText:SetJustifyH("LEFT")
         trainingText:SetWordWrap(true)
 
         local campTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        campTitle:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 285, -18)
+        campTitle:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 320, -18)
         campTitle:SetTextColor(1, 0.82, 0)
         campTitle:SetText("Lures and Campsite Crafts")
 
         local campText = guidePage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         campText:SetPoint("TOPLEFT", campTitle, "BOTTOMLEFT", 0, -6)
-        campText:SetWidth(265)
+        campText:SetWidth(300)
         campText:SetJustifyH("LEFT")
         campText:SetWordWrap(true)
 
         local guideSource = guidePage:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         guideSource:SetPoint("BOTTOMLEFT", guidePage, "BOTTOMLEFT", 16, 18)
-        guideSource:SetWidth(550)
+        guideSource:SetWidth(PAGE_CONTENT_WIDTH)
         guideSource:SetJustifyH("LEFT")
         guideSource:SetText("Source: Wowhead Forever Fishing and Camping guides, Patch 1.60.1. Forever is in beta; routes and data may change.")
 

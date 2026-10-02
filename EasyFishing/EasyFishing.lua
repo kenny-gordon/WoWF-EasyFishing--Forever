@@ -13,7 +13,6 @@ local DB_DEFAULTS = {
     enableDoubleClick = true,
     enableAutoLure    = true,
     enableSound       = true,
-    enableCatchAlert  = false,
     disableClickToMoveWhileFishing = false,
     showFishWatcher = true,
     doubleClickDelay  = 0.4,
@@ -611,7 +610,6 @@ local function RecordFishingLoot()
     local stats = EnsureFishingStats()
     local zoneName = GetRealZoneText() or "Unknown zone"
     local zoneStats = EnsureZoneFishingStats(stats, zoneName)
-    local recordedCatch = false
 
     for lootSlot = 1, GetNumLootItems() do
         local itemLink = GetLootSlotLink(lootSlot)
@@ -652,13 +650,7 @@ local function RecordFishingLoot()
             zoneStats.totalItems = zoneStats.totalItems + quantity
             fishingSession.totalItems = fishingSession.totalItems + quantity
             fishingSession.lastCatch = itemName
-            recordedCatch = true
         end
-    end
-
-    if recordedCatch and EasyFishingDB and EasyFishingDB.enableCatchAlert
-        and SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE and PlaySound then
-        PlaySound(SOUNDKIT.IG_QUEST_LIST_COMPLETE, "SFX")
     end
 
     UpdateFishWatcher()
@@ -942,12 +934,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             "Enable Sound Automation",
             "Turns on sound (and background sound) when you start fishing, then restores your original settings when done.",
             secSound, -4, "enableSound")
-        local cbCatchAlert = MakeCheckbox(
-            "Play Catch Alert",
-            "Play a short sound when the client confirms a fishing catch.",
-            cbSound, -4, "enableCatchAlert")
 
-        local secOutfit = SectionHeader("Fishing Outfit", cbCatchAlert, -10)
+        local secOutfit = SectionHeader("Fishing Outfit", cbSound, -10)
         local outfitHint = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         outfitHint:SetPoint("TOPLEFT", secOutfit, "BOTTOMLEFT", 0, -4)
         outfitHint:SetWidth(540)

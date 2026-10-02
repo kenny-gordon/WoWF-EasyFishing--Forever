@@ -41,7 +41,6 @@ Tired of alt-tabbing to silence or unmute WoW? EasyFishing automatically:
 - Turns **Sound Effects** and **Background Sound** on when you start fishing
 - Restores your original settings the moment you stop
 - Remembers your preferences across sessions
-- Optionally plays a catch alert when the client confirms fishing loot
 
 ### ⚙️ In-Game Options Panel
 Everything is configurable from **Interface → AddOns → EasyFishing: Forever**:
@@ -56,7 +55,6 @@ Everything is configurable from **Interface → AddOns → EasyFishing: Forever*
 | Show Fish Watcher | Show or hide the session and zone tracking panel |
 | Disable Click-to-Move While Fishing | Temporarily turn off Click-to-Move and restore its previous setting afterward |
 | Enable Sound Automation | Toggle CVar automation around fishing |
-| Play Catch Alert | Play a sound when the client confirms a fishing catch |
 | Fishing Outfit | Select a saved Equipment Manager set, equip it, or restore the previous saved set |
 
 ### ⌨️ Slash Commands
