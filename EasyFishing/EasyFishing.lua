@@ -1,9 +1,8 @@
 local MIN_DOUBLE_CLICK = 0.05
 local MAX_DOUBLE_CLICK = 0.4
 local lastClickTime    = 0
-local lureBarHiddenUntil = 0
 local pendingClearTimer = nil
-local lureBarIdleTimer = nil
+local clearBindingOnMouseUp = false
 
 -- ---------------------------------------------------------------------------
 -- Saved variables
@@ -11,19 +10,17 @@ local lureBarIdleTimer = nil
 
 local DB_DEFAULTS = {
     enableDoubleClick = true,
-    enableLureMenu    = true,
+    enableAutoLure    = true,
     enableSound       = true,
     doubleClickDelay  = 0.4,
-    doubleClickButton = "RightButton", -- see BUTTON_OPTIONS below
-    lureBarX          = 0,
-    lureBarY          = -300,
+    doubleClickButton = "LeftButton", -- see BUTTON_OPTIONS below
 }
 
 -- All mouse buttons we can bind to. `binding` is the WoW key name used by
--- SetOverrideBindingSpell; `key` is what GLOBAL_MOUSE_DOWN reports.
+-- SetOverrideBindingClick; `key` is what GLOBAL_MOUSE_DOWN reports.
 local BUTTON_OPTIONS = {
-    { key = "RightButton",  binding = "BUTTON2", label = "Right Mouse" },
     { key = "LeftButton",   binding = "BUTTON1", label = "Left Mouse" },
+    { key = "RightButton",  binding = "BUTTON2", label = "Right Mouse" },
     { key = "MiddleButton", binding = "BUTTON3", label = "Middle Mouse" },
     { key = "Button4",      binding = "BUTTON4", label = "Mouse Button 4" },
     { key = "Button5",      binding = "BUTTON5", label = "Mouse Button 5" },
@@ -66,7 +63,11 @@ local function GetFishingSpellName()
     return name or "Fishing"
 end
 
-local LURES = { 6532, 7307, 6530, 6533, 6811, 6529 }
+local function IsFishingChannelActive()
+    return UnitChannelInfo("player") == GetFishingSpellName()
+end
+
+local LURES = { 6529, 6530, 6811, 7307, 6532, 6533 }
 
 local function GetItemCountWrapper(itemID)
     if C_Item and C_Item.GetItemCount then
@@ -88,164 +89,15 @@ local function GetAvailableLures()
     return available
 end
 
-local function GetIcon(itemID)
-    if C_Item and C_Item.GetItemIconByID then
-        return C_Item.GetItemIconByID(itemID)
-    elseif GetItemIcon then
-        return GetItemIcon(itemID)
-    end
-    return select(10, GetItemInfo(itemID))
-end
+local function GetAutoLureID()
+    if not EasyFishingDB or not EasyFishingDB.enableAutoLure then return nil end
+    if not IsFishingPoleEquipped() then return nil end
 
--- ---------------------------------------------------------------------------
--- Lure menu
--- ---------------------------------------------------------------------------
+    local hasMainHandEnchant = GetWeaponEnchantInfo()
+    if hasMainHandEnchant then return nil end
 
-local lureMenu = CreateFrame("Frame", "EasyFishingLureMenu", UIParent, "BackdropTemplate")
-lureMenu:SetFrameStrata("DIALOG")
-lureMenu:SetClampedToScreen(true)
-lureMenu:SetMovable(true)
-lureMenu:EnableMouse(true)
-lureMenu:RegisterForDrag("LeftButton")
-lureMenu:Hide()
-tinsert(UISpecialFrames, "EasyFishingLureMenu")
-
-local function HideLureBar()
-    if lureBarIdleTimer then
-        lureBarIdleTimer:Cancel()
-        lureBarIdleTimer = nil
-    end
-    lureMenu:Hide()
-end
-
-lureMenu:SetScript("OnDragStart", function(self)
-    if not InCombatLockdown() then
-        self:StartMoving()
-    end
-end)
-lureMenu:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    if not EasyFishingDB then return end
-
-    local centerX, centerY = self:GetCenter()
-    local parentX, parentY = UIParent:GetCenter()
-    EasyFishingDB.lureBarX = centerX - parentX
-    EasyFishingDB.lureBarY = centerY - parentY
-    self:ClearAllPoints()
-    self:SetPoint("CENTER", UIParent, "CENTER", EasyFishingDB.lureBarX, EasyFishingDB.lureBarY)
-end)
-lureMenu:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_TOP", 0, 5)
-    GameTooltip:SetText("Lure Bar")
-    GameTooltip:AddLine("Drag to move", 1, 1, 1)
-    GameTooltip:Show()
-end)
-lureMenu:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-if lureMenu.SetBackdrop then
-    lureMenu:SetBackdrop({
-        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    lureMenu:SetBackdropColor(0, 0, 0, 1)
-    lureMenu:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-end
-
-local lureButtons = {}
-
-local lureMenuCloseBtn = CreateFrame("Button", nil, lureMenu, "UIPanelCloseButton")
-lureMenuCloseBtn:SetSize(20, 20)
-lureMenuCloseBtn:SetScript("OnClick", function()
-    lureBarHiddenUntil = GetTime() + 300
-    HideLureBar()
-end)
-lureMenuCloseBtn:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -5)
-    GameTooltip:SetText("Hide Lure Bar")
-    GameTooltip:AddLine("Hide the bar for the next 5 minutes.", 1, 1, 1, true)
-    GameTooltip:Show()
-end)
-lureMenuCloseBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-local function UpdateLureMenu(availableLures)
-    for _, btn in ipairs(lureButtons) do
-        btn:Hide()
-    end
-
-    if #availableLures == 0 then
-        HideLureBar()
-        return false
-    end
-
-    local btnSize = 28
-    local padding = 5
-    local width   = (#availableLures * btnSize) + ((#availableLures + 2) * padding) + lureMenuCloseBtn:GetWidth()
-    lureMenu:SetSize(width, btnSize + 2 * padding)
-
-    lureMenuCloseBtn:ClearAllPoints()
-    lureMenuCloseBtn:SetPoint("RIGHT", lureMenu, "RIGHT", -padding, 0)
-
-    local spellName = GetFishingSpellName()
-
-    for i, lure in ipairs(availableLures) do
-        local btn = lureButtons[i]
-        if not btn then
-            btn = CreateFrame("Button", "EasyFishingLureBtn" .. i, lureMenu, "SecureActionButtonTemplate")
-            btn:SetSize(btnSize, btnSize)
-            btn:RegisterForClicks("AnyUp", "AnyDown")
-
-            local tex = btn:CreateTexture(nil, "ARTWORK")
-            tex:SetAllPoints()
-            tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-            btn.icon = tex
-            btn:SetNormalTexture("")
-
-            if btn.CreateMaskTexture then
-                local mask = btn:CreateMaskTexture()
-                mask:SetTexture(
-                    "Interface\\CharacterFrame\\TempPortraitAlphaMask",
-                    "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-                mask:SetAllPoints(btn.icon)
-                btn.icon:AddMaskTexture(mask)
-
-                btn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
-                btn:GetHighlightTexture():SetBlendMode("ADD")
-                btn:SetPushedTexture("Interface\\Buttons\\UI-Quickslot-Depress")
-            else
-                btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
-                btn:SetPushedTexture("Interface\\Buttons\\UI-Quickslot-Depress")
-            end
-
-            local font = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-            font:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
-            btn.Count = font
-
-            btn:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -5)
-                GameTooltip:SetItemByID(self.itemID)
-                GameTooltip:Show()
-            end)
-            btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-            table.insert(lureButtons, btn)
-        end
-
-        btn.itemID = lure.id
-        btn:ClearAllPoints()
-        btn:SetPoint("BOTTOMLEFT", lureMenu, "BOTTOMLEFT",
-            padding + (i - 1) * (btnSize + padding), padding)
-
-        btn.icon:SetTexture(GetIcon(lure.id))
-        btn:SetAttribute("type", "macro")
-        -- Apply the lure, then actually cast Fishing (not just "use main hand")
-        btn:SetAttribute("macrotext",
-            "/use item:" .. lure.id .. "\n/cast " .. spellName)
-        btn.Count:SetText(lure.count > 1 and lure.count or "")
-        btn:Show()
-    end
-    return true
+    local availableLures = GetAvailableLures()
+    return availableLures[1] and availableLures[1].id
 end
 
 -- ---------------------------------------------------------------------------
@@ -302,7 +154,16 @@ local function ClearBinding()
         ClearOverrideBindings(castOwner)
     end
     lastClickTime = 0
+    clearBindingOnMouseUp = false
 end
+
+local autoLureButton = CreateFrame(
+    "Button", "EasyFishingAutoLureButton", UIParent, "SecureActionButtonTemplate")
+autoLureButton:SetSize(1, 1)
+autoLureButton:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -10, -10)
+autoLureButton:SetAlpha(0)
+autoLureButton:RegisterForClicks("LeftButtonDown")
+autoLureButton:Show()
 
 local isFishing = false
 
@@ -323,11 +184,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         MAX_DOUBLE_CLICK = EasyFishingDB.doubleClickDelay
-        if EasyFishingDB.lureBarX == 0 and EasyFishingDB.lureBarY == -180 then
-            EasyFishingDB.lureBarY = DB_DEFAULTS.lureBarY
-        end
-        lureMenu:ClearAllPoints()
-        lureMenu:SetPoint("CENTER", UIParent, "CENTER", EasyFishingDB.lureBarX, EasyFishingDB.lureBarY)
 
         -- ------------------------------------------------------------------
         -- Options panel
@@ -374,8 +230,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     if not me:GetChecked() then
                         ClearBinding()
                     end
-                elseif dbKey == "enableLureMenu" and not me:GetChecked() then
-                    HideLureBar()
                 end
             end)
             return cb
@@ -392,6 +246,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local btnLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         btnLabel:SetPoint("TOPLEFT", cbDC, "BOTTOMLEFT", 26, -10)
         btnLabel:SetText("Double-Click Button")
+        btnLabel:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Click-to-Move")
+            GameTooltip:AddLine(
+                "Right-click casting may conflict with Click-to-Move. Left Mouse is the default; choose another button if needed.",
+                1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        btnLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         local dropdown = CreateFrame("Frame", "EasyFishingButtonDropdown",
             panel, "UIDropDownMenuTemplate")
@@ -465,12 +328,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             UpdateSliderState(me:GetChecked())
         end)
 
-        -- Lure menu ---------------------------------------------------------
-        local secLure = SectionHeader("Lure Menu", slider, -24)
+        local secLure = SectionHeader("Lures", slider, -24)
         MakeCheckbox(
-            "Enable Smart Lure Menu",
-            "After casting, if no lure is applied a quick-select menu appears near your cursor.",
-            secLure, -4, "enableLureMenu")
+            "Automatically Apply Lure",
+            "When your pole has no lure, the first double-click applies the weakest available lure. Double-click again to cast Fishing.",
+            secLure, -4, "enableAutoLure")
 
         -- Sound -------------------------------------------------------------
         local secSound = SectionHeader("Sound", secLure, -46)
@@ -492,11 +354,52 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         -- ------------------------------------------------------------------
         local clickFrame = CreateFrame("Frame")
         clickFrame:RegisterEvent("GLOBAL_MOUSE_DOWN")
+        clickFrame:RegisterEvent("GLOBAL_MOUSE_UP")
         clickFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
         clickFrame:SetScript("OnEvent", function(_, evt, buttonName)
             if evt == "PLAYER_REGEN_DISABLED" then
                 ClearBinding()
-                HideLureBar()
+                return
+            end
+
+            if evt == "GLOBAL_MOUSE_UP" then
+                if clearBindingOnMouseUp then
+                    ClearBinding()
+                    return
+                end
+
+                if buttonName ~= EasyFishingDB.doubleClickButton or lastClickTime <= 0 then
+                    return
+                end
+
+                if GetTime() - lastClickTime > MAX_DOUBLE_CLICK
+                    or not EasyFishingDB.enableDoubleClick
+                    or InCombatLockdown()
+                    or IsFishingChannelActive()
+                    or not IsFishingPoleEquipped()
+                    or UnitExists("mouseover")
+                    or UnitExists("target")
+                    or GetUnitSpeed("player") > 0 then
+                    ClearBinding()
+                    return
+                end
+
+                local opt = GetButtonOption(buttonName)
+                local lureID = GetAutoLureID()
+                if lureID then
+                    autoLureButton:SetAttribute("type", "item")
+                    autoLureButton:SetAttribute("item", "item:" .. lureID)
+                    autoLureButton:SetAttribute("target-slot", 16)
+                    SetOverrideBindingClick(
+                        castOwner, true, opt.binding, autoLureButton:GetName(), "LeftButton")
+                else
+                    autoLureButton:SetAttribute("type", "spell")
+                    autoLureButton:SetAttribute("spell", GetFishingSpellName())
+                    autoLureButton:SetAttribute("item", nil)
+                    autoLureButton:SetAttribute("target-slot", nil)
+                    SetOverrideBindingClick(
+                        castOwner, true, opt.binding, autoLureButton:GetName(), "LeftButton")
+                end
                 return
             end
 
@@ -510,32 +413,32 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 return
             end
 
-            if not EasyFishingDB.enableDoubleClick then return end
-            if InCombatLockdown() then return end
-            if not IsFishingPoleEquipped() then return end
-            if UnitExists("mouseover") then return end
-            if UnitExists("target") then return end
-            if GetUnitSpeed("player") > 0 then return end
+            if not EasyFishingDB.enableDoubleClick
+                or InCombatLockdown()
+                or IsFishingChannelActive()
+                or not IsFishingPoleEquipped()
+                or UnitExists("mouseover")
+                or UnitExists("target")
+                or GetUnitSpeed("player") > 0 then
+                if lastClickTime > 0 then
+                    ClearBinding()
+                end
+                return
+            end
 
             local now   = GetTime()
             local delta = now - lastClickTime
-            local opt   = GetButtonOption(selectedKey)
 
             if lastClickTime > 0
                 and delta >= MIN_DOUBLE_CLICK
                 and delta <= MAX_DOUBLE_CLICK then
-                -- Second click: binding will fire the spell. Reset synchronously.
+                -- The binding performs the pending lure or fishing action.
                 lastClickTime = 0
                 CancelPendingTimer()
-                C_Timer.After(0, function()
-                    if not InCombatLockdown() then
-                        ClearOverrideBindings(castOwner)
-                    end
-                end)
+                clearBindingOnMouseUp = true
             else
-                -- First click: arm the binding so the *next* click casts.
+                -- First click: arm the binding so the next click performs the selected action.
                 lastClickTime = now
-                SetOverrideBindingSpell(castOwner, true, opt.binding, GetFishingSpellName())
 
                 CancelPendingTimer()
                 pendingClearTimer = C_Timer.NewTimer(MAX_DOUBLE_CLICK, function()
@@ -552,7 +455,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 -- ---------------------------------------------------------------------------
--- Sound + lure menu automation
+-- Fishing session sound automation
 -- ---------------------------------------------------------------------------
 
 local soundFrame = CreateFrame("Frame")
@@ -568,10 +471,6 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
         local channelName  = UnitChannelInfo("player")
         if channelName ~= expectedName then return end
 
-        if lureBarIdleTimer then
-            lureBarIdleTimer:Cancel()
-            lureBarIdleTimer = nil
-        end
         isFishing = true
         EasyFishingDB = EasyFishingDB or {}
 
@@ -591,16 +490,6 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
             end
         end
 
-        -- Keep the lure bar available across casts and bobber waits.
-        if not EasyFishingDB.enableLureMenu or InCombatLockdown() then
-            HideLureBar()
-        elseif GetTime() >= lureBarHiddenUntil then
-            local lures = GetAvailableLures()
-            if UpdateLureMenu(lures) then
-                lureMenu:Show()
-            end
-        end
-
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         if not isFishing then return end
         isFishing = false
@@ -615,13 +504,6 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
             SetCVarBG(userBGSetting)
             userBGSetting = nil
         end
-        if lureMenu:IsShown() then
-            lureBarIdleTimer = C_Timer.NewTimer(120, function()
-                lureBarIdleTimer = nil
-                if not isFishing then
-                    lureMenu:Hide()
-                end
-            end)
-        end
+
     end
 end)
