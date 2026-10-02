@@ -460,17 +460,36 @@ local soundFrame = CreateFrame("Frame")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
 soundFrame:RegisterEvent("PLAYER_STARTED_MOVING")
+soundFrame:RegisterEvent("PLAYER_LOGOUT")
 soundFrame:RegisterEvent("LOOT_OPENED")
 soundFrame:RegisterEvent("SKILL_LINES_CHANGED")
 soundFrame:RegisterEvent("CHAT_MSG_SKILL")
 local userBGSetting = nil
 
+local function RestoreFishingSoundSettings()
+    if EasyFishingDB and EasyFishingDB.userSoundSetting ~= nil then
+        SetCVarSound(EasyFishingDB.userSoundSetting)
+        EasyFishingDB.userSoundSetting = nil
+    end
+    if userBGSetting ~= nil then
+        SetCVarBG(userBGSetting)
+        userBGSetting = nil
+    end
+end
+
 soundFrame:SetScript("OnEvent", function(_, event, unit)
-    if event == "LOOT_OPENED" then
+    if event == "PLAYER_LOGOUT" then
+        isFishing = false
+        RestoreFishingSoundSettings()
+        return
+    elseif event == "LOOT_OPENED" then
         RecordFishingLoot()
         return
     elseif event == "PLAYER_STARTED_MOVING" then
         if fishingSession then
+            fishingSession.lastActivityAt = GetTime()
+            isFishing = false
+            RestoreFishingSoundSettings()
             EndFishingSession()
         end
         return
@@ -513,16 +532,7 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
         isFishing = false
         UpdateFishWatcher()
 
-        if EasyFishingDB then
-            if EasyFishingDB.userSoundSetting ~= nil then
-                SetCVarSound(EasyFishingDB.userSoundSetting)
-                EasyFishingDB.userSoundSetting = nil
-            end
-        end
-        if userBGSetting ~= nil then
-            SetCVarBG(userBGSetting)
-            userBGSetting = nil
-        end
+        RestoreFishingSoundSettings()
         if fishingSession then
             fishingSession.lastActivityAt = GetTime()
         end

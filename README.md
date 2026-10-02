@@ -16,7 +16,7 @@ With a fishing pole equipped, press the selected mouse button once or twice to c
 - Right-click casting may conflict with Click-to-Move; Left Mouse is the default.
 - When finished fishing, use **Toggle Gear** to restore your previous set before interacting with mailboxes or NPCs. This removes the pole so Click-to-Cast no longer intercepts clicks.
 - Adjustable double-click delay (0.1s–0.8s)
-- Casts only when standing still, out of combat, no mouseover target, and no unit selected
+- Casts only from the game world when standing still, out of combat, with no mouseover target and no unit selected; clicks on UI controls never cast
 
 ### 🪝 Automatic Lures
 When enabled, the first click applies the weakest lure allowed by your Fishing skill if your pole has none. Shiny Bauble requires skill 1, Nightcrawlers or Fish Lens require 50, and stronger lures require 100. Click again using the selected pattern to cast Fishing. If a lure is already active or none can be applied, the click casts Fishing directly.
@@ -84,12 +84,7 @@ To put the gear toggle on your action bar, create a macro and drag it onto a bar
 ```
 
 ### ID Data
-Static fishing spell, lure, pole, and equipment-slot IDs are maintained in [Data.lua](EasyFishing/Data.lua). Fish item IDs, map IDs, and equipment-set IDs are captured from the client at runtime; the addon currently uses no trainer NPC IDs.
-| `/ef link fish` | Prefill chat with the last caught fish hyperlink |
-| `/ef link location` | Prefill chat with the selected atlas waypoint link |
-| `/ef link gear` | Prefill chat with links to the selected outfit's fishing gear |
-
-Link commands open the chat edit box with the links inserted; they do not send the message.
+Fishing spell, lure, gear, campsite, reward, and NPC reference data are maintained in [Data.lua](EasyFishing/Data.lua). Caught-fish IDs, observed map locations, and equipment-set IDs are recorded or read from the client at runtime. The addon does not store trainer NPC IDs or claim exact waypoint coordinates for NPCs.
 
 ---
 

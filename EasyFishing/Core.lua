@@ -78,6 +78,10 @@ local function IsFishingChannelActive()
     return UnitChannelInfo("player") == GetFishingSpellName()
 end
 
+local function IsMouseOverWorld()
+    return type(GetMouseFocus) == "function" and GetMouseFocus() == WorldFrame
+end
+
 local function GetFishingSkill()
     if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
         local _, _, _, fishingIndex = GetProfessions()
@@ -397,6 +401,7 @@ function EF.InitializeClickHandling()
                 or InCombatLockdown()
                 or IsFishingChannelActive()
                 or not IsFishingPoleEquipped()
+                or not IsMouseOverWorld()
                 or UnitExists("mouseover")
                 or UnitExists("target")
                 or GetUnitSpeed("player") > 0 then
@@ -420,6 +425,7 @@ function EF.InitializeClickHandling()
             or InCombatLockdown()
             or IsFishingChannelActive()
             or not IsFishingPoleEquipped()
+            or not IsMouseOverWorld()
             or UnitExists("mouseover")
             or UnitExists("target")
             or GetUnitSpeed("player") > 0 then

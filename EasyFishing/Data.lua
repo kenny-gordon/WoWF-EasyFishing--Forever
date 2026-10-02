@@ -88,7 +88,7 @@ EasyFishing.Data = {
         { name = "Fenn Fairweather", role = "Fisherman", level = 5, side = "Neutral", location = "Shen'dar Village", zone = "Zephras Isle", x = 45, y = 48.4 },
         { name = "Grimnur Stonebrand", role = "Fishing Trainer", level = 35, side = "Alliance", location = "Forlorn Cavern", zone = "Ironforge", x = 48.4, y = 6.4 },
         { name = "Harold Riggs", role = "Fishing Trainer", level = 25, side = "Alliance", location = "Menethil Harbor", zone = "Wetlands", x = 8.2, y = 58.6 },
-        { name = "Hunter Moore", role = "Fisherman", level = 31, side = "Alliance", location = "Coordinates not listed", zone = "Hillsbrad Foothills" },
+        { name = "Hunter Moore", role = "Fisherman", level = 31, side = "Alliance", zone = "Hillsbrad Foothills" },
         { name = "Kah Mistrunner", role = "Fishing Trainer", level = 45, side = "Horde", location = "Middle Tier", zone = "Thunder Bluff", x = 56, y = 46.8 },
         { name = "Katoom the Angler", role = "Fishing Trainer & Supplies", level = 42, side = "Horde", location = "Revantusk Village", zone = "The Hinterlands", x = 80.2, y = 81.4 },
         { name = "Kil'Hiwana", role = "Fisherman", level = 30, side = "Horde", location = "South of Blackfathom Deeps", zone = "Ashenvale", x = 10.8, y = 33.6 },

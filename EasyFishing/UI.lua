@@ -171,25 +171,42 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         guidePage:SetAllPoints(panel)
         guidePage:Hide()
 
-        local settingsTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-        settingsTab:SetSize(86, 22)
-        settingsTab:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -366, -10)
-        settingsTab:SetText("Settings")
+        local guideTab = CreateFrame("Button", "EasyFishingOptionsGuideTab", panel, "PanelTopTabButtonTemplate")
+        guideTab:SetSize(86, 32)
+        guideTab:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -366, -10)
+        guideTab:SetText("Guide")
 
-        local statisticsTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-        statisticsTab:SetSize(86, 22)
-        statisticsTab:SetPoint("LEFT", settingsTab, "RIGHT", 4, 0)
-        statisticsTab:SetText("Statistics")
-
-        local locationsTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-        locationsTab:SetSize(86, 22)
-        locationsTab:SetPoint("LEFT", statisticsTab, "RIGHT", 4, 0)
+        local locationsTab = CreateFrame("Button", "EasyFishingOptionsLocationsTab", panel, "PanelTopTabButtonTemplate")
+        locationsTab:SetSize(86, 32)
+        locationsTab:SetPoint("LEFT", guideTab, "RIGHT", 4, 0)
         locationsTab:SetText("Locations")
 
-        local guideTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-        guideTab:SetSize(86, 22)
-        guideTab:SetPoint("LEFT", locationsTab, "RIGHT", 4, 0)
-        guideTab:SetText("Guide")
+        local statisticsTab = CreateFrame("Button", "EasyFishingOptionsStatisticsTab", panel, "PanelTopTabButtonTemplate")
+        statisticsTab:SetSize(86, 32)
+        statisticsTab:SetPoint("LEFT", locationsTab, "RIGHT", 4, 0)
+        statisticsTab:SetText("Statistics")
+
+        local settingsTab = CreateFrame("Button", "EasyFishingOptionsSettingsTab", panel, "PanelTopTabButtonTemplate")
+        settingsTab:SetSize(86, 32)
+        settingsTab:SetPoint("LEFT", statisticsTab, "RIGHT", 4, 0)
+        settingsTab:SetText("Settings")
+        local optionPageTabs = {
+            settings = settingsTab,
+            stats = statisticsTab,
+            atlas = locationsTab,
+            guide = guideTab,
+        }
+        local function SelectOptionsPageTab(pageName)
+            for name, tab in pairs(optionPageTabs) do
+                local isSelected = name == pageName
+                if isSelected then
+                    PanelTemplates_SelectTab(tab)
+                else
+                    PanelTemplates_DeselectTab(tab)
+                end
+            end
+        end
+        SelectOptionsPageTab("settings")
 
         local PAGE_CONTENT_WIDTH = 620
 
@@ -286,7 +303,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local cbDC = MakeCheckbox(
             "Enable Click-to-Cast",
-            "Use the selected mouse button and click pattern to cast while holding a fishing pole.",
+            "Use the selected mouse button and click pattern over the game world while holding a fishing pole. UI buttons and menus will not cast.",
             secCast, -4, "enableDoubleClick")
 
         local modeLabel = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -521,10 +538,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             metricValues[index] = value
         end
 
-        local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        statisticsSummary:SetPoint("TOPLEFT", metricValues[1], "BOTTOMLEFT", 0, -4)
+        local statisticsSummaryRule = statisticsPage:CreateTexture(nil, "ARTWORK")
+        statisticsSummaryRule:SetColorTexture(0.42, 0.34, 0.17, 0.6)
+        statisticsSummaryRule:SetSize(PAGE_CONTENT_WIDTH, 1)
+        statisticsSummaryRule:SetPoint("TOPLEFT", metricValues[1], "BOTTOMLEFT", 0, -4)
+
+        local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        statisticsSummary:SetPoint("TOPLEFT", statisticsSummaryRule, "BOTTOMLEFT", 0, -4)
         statisticsSummary:SetWidth(PAGE_CONTENT_WIDTH)
-        statisticsSummary:SetJustifyH("LEFT")
+        statisticsSummary:SetJustifyH("CENTER")
 
         local statisticsCaveat = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         statisticsCaveat:SetPoint("BOTTOMLEFT", statisticsPage, "BOTTOMLEFT", 16, 18)
@@ -589,6 +611,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             local row = CreateFrame("Frame", nil, parent)
             row:SetSize(300, 48)
 
+            row.background = row:CreateTexture(nil, "BACKGROUND")
+            row.background:SetAllPoints(row)
+
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
             row.name:SetWidth(190)
@@ -636,6 +661,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end
                 row:ClearAllPoints()
                 row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((index - 1) * 56))
+                row.background:SetColorTexture(0.55, 0.48, 0.3, index % 2 == 0 and 0.07 or 0.025)
                 row.name:SetText(entry.name)
                 row.value:SetText(formatValue(entry))
                 row.detail:SetText(formatDetail(entry))
@@ -1403,7 +1429,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     or (trainer.side == "Both" and trainerFilter ~= "Neutral")
                 local searchText = string.lower(string.format("%s %s %s %s %s %d",
                     trainer.name, trainer.role, trainer.side,
-                    trainer.location, trainer.zone, trainer.level))
+                    trainer.location or "", trainer.zone, trainer.level))
                 if matchesFaction and (query == "" or string.find(searchText, query, 1, true)) then
                     table.insert(trainers, trainer)
                 end
@@ -1477,7 +1503,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 else
                     row.side:SetTextColor(1, 0.82, 0)
                 end
-                row.location:SetText(trainer.location .. ", " .. trainer.zone)
+                row.location:SetText(trainer.location and trainer.location ~= ""
+                    and (trainer.location .. ", " .. trainer.zone) or trainer.zone)
                 row.coordinates:SetText(trainer.x and trainer.y
                     and string.format("%.1f, %.1f", trainer.x, trainer.y) or "Not listed")
                 row:Show()
@@ -1671,12 +1698,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         RefreshTrainerList()
 
         settingsTab:SetScript("OnClick", function()
+            SelectOptionsPageTab("settings")
             statisticsPage:Hide()
             locationsPage:Hide()
             guidePage:Hide()
             settingsPage:Show()
         end)
         statisticsTab:SetScript("OnClick", function()
+            SelectOptionsPageTab("stats")
             settingsPage:Hide()
             locationsPage:Hide()
             guidePage:Hide()
@@ -1684,6 +1713,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             statisticsPage:Show()
         end)
         locationsTab:SetScript("OnClick", function()
+            SelectOptionsPageTab("atlas")
             settingsPage:Hide()
             statisticsPage:Hide()
             guidePage:Hide()
@@ -1691,6 +1721,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             locationsPage:Show()
         end)
         guideTab:SetScript("OnClick", function()
+            SelectOptionsPageTab("guide")
             settingsPage:Hide()
             statisticsPage:Hide()
             locationsPage:Hide()
@@ -1720,6 +1751,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local function ShowOptionsPage(page)
             OpenOptions()
+            if page == "stats" or page == "atlas" or page == "guide" then
+                SelectOptionsPageTab(page)
+            else
+                page = "settings"
+                SelectOptionsPageTab(page)
+            end
             settingsPage:Hide()
             statisticsPage:Hide()
             locationsPage:Hide()
@@ -1743,7 +1780,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         SlashCmdList.EASYFISHING = function(message)
             local command = (message or ""):lower():match("^%s*(.-)%s*$")
             if command == "" or command == "menu" then
-                ShowOptionsPage("settings")
+                ShowOptionsPage("guide")
             elseif command == "stats" then
                 ShowOptionsPage("stats")
             elseif command == "atlas" or command == "locations" then
