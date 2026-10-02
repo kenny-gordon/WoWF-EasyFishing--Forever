@@ -12,8 +12,10 @@ local DB_DEFAULTS = {
     enableDoubleClick = true,
     enableAutoLure    = true,
     enableSound       = true,
+    disableClickToMoveWhileFishing = false,
     doubleClickDelay  = 0.4,
     doubleClickButton = "LeftButton", -- see BUTTON_OPTIONS below
+    castClickMode     = "DoubleClick",
 }
 
 -- All mouse buttons we can bind to. `binding` is the WoW key name used by
@@ -24,6 +26,11 @@ local BUTTON_OPTIONS = {
     { key = "MiddleButton", binding = "BUTTON3", label = "Middle Mouse" },
     { key = "Button4",      binding = "BUTTON4", label = "Mouse Button 4" },
     { key = "Button5",      binding = "BUTTON5", label = "Mouse Button 5" },
+}
+
+local CAST_MODE_OPTIONS = {
+    { value = "SingleClick", label = "Single Click" },
+    { value = "DoubleClick", label = "Double Click" },
 }
 
 local BUTTON_BY_KEY = {}
@@ -134,6 +141,51 @@ local function SetCVarSound(val)
     end
 end
 
+local savedAutoInteractSetting = nil
+
+local function GetAutoInteractSetting()
+    if C_CVar and C_CVar.GetCVar then
+        return C_CVar.GetCVar("autointeract")
+    end
+    return GetCVar("autointeract")
+end
+
+local function SetAutoInteractSetting(value)
+    if C_CVar and C_CVar.SetCVar then
+        C_CVar.SetCVar("autointeract", value)
+    else
+        SetCVar("autointeract", value)
+    end
+end
+
+local function RestoreAutoInteractSetting()
+    if savedAutoInteractSetting ~= nil then
+        local previousValue = savedAutoInteractSetting
+        savedAutoInteractSetting = nil
+        SetAutoInteractSetting(previousValue)
+    end
+end
+
+local function UpdateAutoInteractSetting()
+    local shouldDisable = EasyFishingDB
+        and EasyFishingDB.disableClickToMoveWhileFishing
+        and EasyFishingDB.enableDoubleClick
+        and IsFishingPoleEquipped()
+
+    if shouldDisable then
+        local currentValue = GetAutoInteractSetting()
+        if currentValue == nil then return end
+        if savedAutoInteractSetting == nil then
+            savedAutoInteractSetting = currentValue
+        end
+        if currentValue ~= "0" then
+            SetAutoInteractSetting("0")
+        end
+    else
+        RestoreAutoInteractSetting()
+    end
+end
+
 -- ---------------------------------------------------------------------------
 -- Double-click casting
 -- ---------------------------------------------------------------------------
@@ -165,6 +217,26 @@ autoLureButton:SetAlpha(0)
 autoLureButton:RegisterForClicks("LeftButtonDown")
 autoLureButton:Show()
 
+local function BindCastAction(buttonName)
+    local option = GetButtonOption(buttonName)
+    local lureID = GetAutoLureID()
+
+    if lureID then
+        autoLureButton:SetAttribute("type", "item")
+        autoLureButton:SetAttribute("item", "item:" .. lureID)
+        autoLureButton:SetAttribute("target-slot", 16)
+        autoLureButton:SetAttribute("spell", nil)
+    else
+        autoLureButton:SetAttribute("type", "spell")
+        autoLureButton:SetAttribute("spell", GetFishingSpellName())
+        autoLureButton:SetAttribute("item", nil)
+        autoLureButton:SetAttribute("target-slot", nil)
+    end
+
+    SetOverrideBindingClick(
+        castOwner, true, option.binding, autoLureButton:GetName(), "LeftButton")
+end
+
 local isFishing = false
 
 -- ---------------------------------------------------------------------------
@@ -173,8 +245,21 @@ local isFishing = false
 
 local mainFrame = CreateFrame("Frame")
 mainFrame:RegisterEvent("PLAYER_LOGIN")
+mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+mainFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+mainFrame:RegisterEvent("PLAYER_LOGOUT")
 
 mainFrame:SetScript("OnEvent", function(self, event, ...)
+    if event == "PLAYER_LOGOUT" then
+        RestoreAutoInteractSetting()
+        return
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_EQUIPMENT_CHANGED" then
+        UpdateAutoInteractSetting()
+        return
+    elseif event ~= "PLAYER_LOGIN" then
+        return
+    end
+
     if event == "PLAYER_LOGIN" then
         -- Initialise saved variables
         EasyFishingDB = EasyFishingDB or {}
@@ -184,6 +269,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         MAX_DOUBLE_CLICK = EasyFishingDB.doubleClickDelay
+        UpdateAutoInteractSetting()
 
         -- ------------------------------------------------------------------
         -- Options panel
@@ -230,6 +316,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     if not me:GetChecked() then
                         ClearBinding()
                     end
+                    UpdateAutoInteractSetting()
+                elseif dbKey == "disableClickToMoveWhileFishing" then
+                    UpdateAutoInteractSetting()
                 end
             end)
             return cb
@@ -238,14 +327,47 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local secCast = SectionHeader("Casting", divider, -14)
 
         local cbDC = MakeCheckbox(
-            "Enable Double-Click to Fish",
-            "Double-click the selected mouse button anywhere while holding a fishing pole to instantly cast Fishing.",
+            "Enable Click-to-Cast",
+            "Cast using the selected mouse button and click mode while holding a fishing pole.",
             secCast, -4, "enableDoubleClick")
+
+        local modeLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        modeLabel:SetPoint("TOPLEFT", cbDC, "BOTTOMLEFT", 26, -10)
+        modeLabel:SetText("Cast Click Mode")
+
+        local UpdateSliderState
+        local modeDropdown = CreateFrame("Frame", "EasyFishingCastModeDropdown",
+            panel, "UIDropDownMenuTemplate")
+        modeDropdown:SetPoint("TOPLEFT", modeLabel, "BOTTOMLEFT", -16, -4)
+        UIDropDownMenu_SetWidth(modeDropdown, 150)
+        local function GetCastModeLabel(value)
+            for _, option in ipairs(CAST_MODE_OPTIONS) do
+                if option.value == value then return option.label end
+            end
+            return "Double Click"
+        end
+        UIDropDownMenu_SetText(modeDropdown, GetCastModeLabel(EasyFishingDB.castClickMode))
+        UIDropDownMenu_Initialize(modeDropdown, function()
+            for _, option in ipairs(CAST_MODE_OPTIONS) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = option.label
+                info.checked = EasyFishingDB.castClickMode == option.value
+                info.func = function()
+                    EasyFishingDB.castClickMode = option.value
+                    UIDropDownMenu_SetText(modeDropdown, option.label)
+                    CloseDropDownMenus()
+                    ClearBinding()
+                    UpdateSliderState(
+                        EasyFishingDB.enableDoubleClick and option.value == "DoubleClick")
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
 
         -- Button picker -----------------------------------------------------
         local btnLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        btnLabel:SetPoint("TOPLEFT", cbDC, "BOTTOMLEFT", 26, -10)
-        btnLabel:SetText("Double-Click Button")
+        btnLabel:SetPoint("TOPLEFT", modeDropdown, "BOTTOMLEFT", 16, -10)
+        btnLabel:SetText("Cast Button")
         btnLabel:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Click-to-Move")
@@ -305,7 +427,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             me.Text:SetText(string.format("%.2fs", rounded))
         end)
 
-        local function UpdateSliderState(enabled)
+        UpdateSliderState = function(enabled)
             if enabled then
                 slider:Enable()
                 sliderLabel:SetTextColor(1, 1, 1)
@@ -320,22 +442,30 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 slider.High:SetTextColor(0.4, 0.4, 0.4)
             end
         end
-        UpdateSliderState(EasyFishingDB.enableDoubleClick)
+        UpdateSliderState(
+            EasyFishingDB.enableDoubleClick and EasyFishingDB.castClickMode == "DoubleClick")
 
         local origClick = cbDC:GetScript("OnClick")
         cbDC:SetScript("OnClick", function(me, ...)
             if origClick then origClick(me, ...) end
-            UpdateSliderState(me:GetChecked())
+            UpdateSliderState(
+                me:GetChecked() and EasyFishingDB.castClickMode == "DoubleClick")
         end)
 
         local secLure = SectionHeader("Lures", slider, -24)
         MakeCheckbox(
             "Automatically Apply Lure",
-            "When your pole has no lure, the first double-click applies the weakest available lure. Double-click again to cast Fishing.",
+            "When your pole has no lure, the first selected cast action applies the weakest available lure. Repeat the selected click pattern to cast Fishing.",
             secLure, -4, "enableAutoLure")
 
+        local secMovement = SectionHeader("Movement", secLure, -46)
+        local cbDisableClickToMove = MakeCheckbox(
+            "Disable Click-to-Move While Fishing",
+            "Temporarily turns off Click-to-Move while a fishing pole is equipped and click-to-cast is enabled, then restores its previous setting.",
+            secMovement, -4, "disableClickToMoveWhileFishing")
+
         -- Sound -------------------------------------------------------------
-        local secSound = SectionHeader("Sound", secLure, -46)
+        local secSound = SectionHeader("Sound", cbDisableClickToMove, -10)
         MakeCheckbox(
             "Enable Sound Automation",
             "Turns on sound (and background sound) when you start fishing, then restores your original settings when done.",
@@ -384,22 +514,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     return
                 end
 
-                local opt = GetButtonOption(buttonName)
-                local lureID = GetAutoLureID()
-                if lureID then
-                    autoLureButton:SetAttribute("type", "item")
-                    autoLureButton:SetAttribute("item", "item:" .. lureID)
-                    autoLureButton:SetAttribute("target-slot", 16)
-                    SetOverrideBindingClick(
-                        castOwner, true, opt.binding, autoLureButton:GetName(), "LeftButton")
-                else
-                    autoLureButton:SetAttribute("type", "spell")
-                    autoLureButton:SetAttribute("spell", GetFishingSpellName())
-                    autoLureButton:SetAttribute("item", nil)
-                    autoLureButton:SetAttribute("target-slot", nil)
-                    SetOverrideBindingClick(
-                        castOwner, true, opt.binding, autoLureButton:GetName(), "LeftButton")
-                end
+                BindCastAction(buttonName)
                 return
             end
 
@@ -428,6 +543,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             local now   = GetTime()
             local delta = now - lastClickTime
+
+            if EasyFishingDB.castClickMode == "SingleClick" then
+                lastClickTime = 0
+                CancelPendingTimer()
+                BindCastAction(buttonName)
+                clearBindingOnMouseUp = true
+                return
+            end
 
             if lastClickTime > 0
                 and delta >= MIN_DOUBLE_CLICK
