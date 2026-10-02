@@ -193,16 +193,23 @@ local function ShareLastFish()
     OpenChatWithLinks(stats.lastCatchItemLink)
 end
 
-local activeTomTomWaypointID
-local function SetTomTomWaypoint(spot, label)
+local activeTomTomWaypointIDs = {}
+local function ClearTomTomWaypoints()
+    local tomTom = rawget(_G, "TomTom")
+    if type(tomTom) == "table" and type(tomTom.RemoveWaypoint) == "function" then
+        for _, waypointID in ipairs(activeTomTomWaypointIDs) do
+            pcall(tomTom.RemoveWaypoint, tomTom, waypointID)
+        end
+    end
+    activeTomTomWaypointIDs = {}
+end
+
+local function AddTomTomWaypoint(spot, label)
     local tomTom = rawget(_G, "TomTom")
     if type(tomTom) ~= "table" or type(tomTom.AddWaypoint) ~= "function" then
         return false
     end
 
-    if activeTomTomWaypointID and type(tomTom.RemoveWaypoint) == "function" then
-        pcall(tomTom.RemoveWaypoint, tomTom, activeTomTomWaypointID)
-    end
     local ok, waypointID = pcall(tomTom.AddWaypoint, tomTom,
         spot.mapID, spot.x, spot.y, {
             title = label,
@@ -214,11 +221,16 @@ local function SetTomTomWaypoint(spot, label)
     if not ok or not waypointID then
         return false
     end
-    activeTomTomWaypointID = waypointID
-    if type(tomTom.SetCrazyArrow) == "function" then
+    table.insert(activeTomTomWaypointIDs, waypointID)
+    if #activeTomTomWaypointIDs == 1 and type(tomTom.SetCrazyArrow) == "function" then
         pcall(tomTom.SetCrazyArrow, tomTom, waypointID, 15, label)
     end
     return true
+end
+
+local function SetTomTomWaypoint(spot, label)
+    ClearTomTomWaypoints()
+    return AddTomTomWaypoint(spot, label)
 end
 
 local function OpenFishingMap(mapID)
@@ -281,6 +293,57 @@ function EF.SetFishingWaypoint(spot, label)
         C_SuperTrack.SetSuperTrackedUserWaypoint(true)
     end
     OpenFishingMap(spot.mapID)
+    return true
+end
+
+function EF.ShowFishAlmanacMap(fish)
+    if not fish then return false end
+    ClearTomTomWaypoints()
+    local locations = fish.locations or {}
+    local firstEntry = locations[1]
+    local firstSpot = firstEntry and firstEntry.spot
+    local mapID = firstSpot and firstSpot.mapID or (fish.almanac and fish.almanac.mapID)
+    if not mapID then
+        print("EasyFishing: no verified habitat or saved location is available for this fish.")
+        return false
+    end
+
+    local nativeWaypointSet, tomTomWaypointCount = false, 0
+    if firstSpot then
+        if C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
+            and UiMapPoint and UiMapPoint.CreateFromCoordinates
+            and C_Map.CanSetUserWaypointOnMap(firstSpot.mapID) then
+            local point = UiMapPoint.CreateFromCoordinates(firstSpot.mapID, firstSpot.x, firstSpot.y)
+            nativeWaypointSet = point and C_Map.SetUserWaypoint(point) or false
+        end
+        for _, entry in ipairs(locations) do
+            local spot = entry.spot
+            if spot and spot.mapID and AddTomTomWaypoint(spot,
+                string.format("%s - %s (%d catches)", fish.name, entry.zone, entry.count)) then
+                tomTomWaypointCount = tomTomWaypointCount + 1
+            end
+        end
+        if nativeWaypointSet then
+            EF.GetCharacterDB().lastFishingSpot = {
+                mapID = firstSpot.mapID,
+                x = firstSpot.x,
+                y = firstSpot.y,
+                label = fish.name .. " - " .. firstEntry.zone,
+            }
+            if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+                C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+            end
+        elseif C_Map and C_Map.ClearUserWaypoint then
+            C_Map.ClearUserWaypoint()
+        end
+        if #locations > 1 and tomTomWaypointCount == 0 then
+            print("EasyFishing: Blizzard's map shows one waypoint; load TomTom to pin every saved hotspot.")
+        end
+    else
+        if C_Map and C_Map.ClearUserWaypoint then C_Map.ClearUserWaypoint() end
+        print("EasyFishing: opening the reported zone; exact hotspots need recorded catches.")
+    end
+    OpenFishingMap(mapID)
     return true
 end
 
@@ -508,6 +571,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         openWindowButton:SetPoint("TOPRIGHT", settingsPage, "TOPRIGHT", -18, -12)
         openWindowButton:SetText("Open EasyFishing")
         openWindowButton:SetScript("OnClick", function() OpenFishingWindow("home") end)
+        local resetSettingsButton = CreateFrame(
+            "Button", "EasyFishingResetSettingsButton", settingsPage, "UIPanelButtonTemplate")
+        resetSettingsButton:SetSize(122, 24)
+        resetSettingsButton:SetPoint("RIGHT", openWindowButton, "LEFT", -6, 0)
+        resetSettingsButton:SetText("Reset Preferences")
+        resetSettingsButton:SetScript("OnClick", function()
+            StaticPopup_Show("EASYFISHING_RESET_SETTINGS")
+        end)
 
         local function SectionHeader(text, anchor, yOff)
             local fs = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -817,6 +888,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         toggleOutfitButton:SetScript("OnClick", ToggleFishingOutfit)
 
         local statisticsDivider = PageHeader(statisticsPage, "Fishing Statistics")
+        local resetHistoryButton = CreateFrame(
+            "Button", "EasyFishingResetHistoryButton", statisticsPage, "UIPanelButtonTemplate")
+        resetHistoryButton:SetSize(112, 22)
+        resetHistoryButton:SetPoint("TOPRIGHT", statisticsPage, "TOPRIGHT", -18, -12)
+        resetHistoryButton:SetText("Reset History")
+        resetHistoryButton:SetScript("OnClick", function()
+            StaticPopup_Show("EASYFISHING_RESET_HISTORY")
+        end)
 
         local metricValues = {}
         local metricLabels = { "Items Caught", "Casts", "Fishing Time", "Skill Gains" }
@@ -1348,7 +1427,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         transferHelp:SetWidth(510)
         transferHelp:SetJustifyH("LEFT")
         transferHelp:SetWordWrap(true)
-        transferHelp:SetText("Export to copy your saved spots. Paste a versioned export here and import it; matching locations merge without double-counting.")
+        transferHelp:SetText("Export creates a local snapshot with zones, exact coordinates, catch counts, labels, and dates; it is never uploaded automatically. Review it before sharing. Paste a versioned export here to merge locations without double-counting.")
 
         local transferClose = CreateFrame("Button", nil, transferFrame, "UIPanelCloseButton")
         transferClose:SetPoint("TOPRIGHT", transferFrame, "TOPRIGHT", -4, -4)
@@ -1431,6 +1510,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         spotTransferButton:SetPoint("RIGHT", atlasZoneDropdown, "LEFT", -4, 0)
         spotTransferButton:SetText("Import / Export")
         spotTransferButton:SetScript("OnClick", OpenLocationTransfer)
+        spotTransferButton:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+            GameTooltip:SetText("Share Fishing Locations")
+            GameTooltip:AddLine("Export a copy or import locations from an EFS2/EFS3 transfer. Imported records merge without double-counting.",
+                1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        spotTransferButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         local locationSearch = CreateFrame("EditBox", "EasyFishingLocationSearch",
             locationsPage, "InputBoxTemplate")
@@ -1454,6 +1541,26 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local locationRows = {}
         local expandedAreas = {}
+        StaticPopupDialogs["EASYFISHING_RESET_HISTORY"] = {
+            text = "Reset this character's fishing history? This clears recorded catches, statistics, and saved fishing locations. Gear choices, settings, and window positions are kept.",
+            button1 = ACCEPT,
+            button2 = CANCEL,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function() EF.ResetFishingHistory() end,
+        }
+        StaticPopupDialogs["EASYFISHING_RESET_SETTINGS"] = {
+            text = "Restore account-wide EasyFishing preferences to defaults? Character catch history, gear choices, and window positions are kept.",
+            button1 = ACCEPT,
+            button2 = CANCEL,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function() EF.ResetAccountSettings() end,
+        }
         StaticPopupDialogs["EASYFISHING_RENAME_SPOT"] = {
             text = "Enter a name for this fishing location:",
             button1 = ACCEPT,
@@ -2138,16 +2245,16 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local trainerHeaderLocation = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderLocation:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 238, 0)
-        trainerHeaderLocation:SetWidth(198)
+        trainerHeaderLocation:SetWidth(168)
         trainerHeaderLocation:SetText("Town / Zone")
 
         local trainerHeaderCoordinates = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderCoordinates:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 442, 0)
-        trainerHeaderCoordinates:SetWidth(96)
+        trainerHeaderCoordinates:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 414, 0)
+        trainerHeaderCoordinates:SetWidth(84)
         trainerHeaderCoordinates:SetText("Coords.")
 
         local trainerHeaderWaypoint = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderWaypoint:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 548, 0)
+        trainerHeaderWaypoint:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 508, 0)
         trainerHeaderWaypoint:SetWidth(84)
         trainerHeaderWaypoint:SetText("Map")
 
@@ -2205,7 +2312,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local row = trainerRows[index]
                 if not row then
                     row = CreateFrame("Frame", nil, trainerContent)
-                    row:SetSize(640, 38)
+                    row:SetSize(SCROLL_CONTENT_WIDTH, 38)
 
                     row.background = row:CreateTexture(nil, "BACKGROUND")
                     row.background:SetAllPoints(row)
@@ -2229,20 +2336,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
                     row.location = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.location:SetPoint("TOPLEFT", row, "TOPLEFT", 238, -3)
-                    row.location:SetWidth(198)
+                    row.location:SetWidth(168)
                     row.location:SetJustifyH("LEFT")
                     row.location:SetWordWrap(false)
 
                     row.zone = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                     row.zone:SetPoint("TOPLEFT", row.location, "BOTTOMLEFT", 0, -1)
-                    row.zone:SetWidth(198)
+                    row.zone:SetWidth(168)
                     row.zone:SetJustifyH("LEFT")
                     row.zone:SetTextColor(0.72, 0.72, 0.72)
                     row.zone:SetWordWrap(false)
 
                     row.coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.coordinates:SetPoint("TOPLEFT", row, "TOPLEFT", 442, -12)
-                    row.coordinates:SetWidth(96)
+                    row.coordinates:SetPoint("TOPLEFT", row, "TOPLEFT", 414, -12)
+                    row.coordinates:SetWidth(84)
                     row.coordinates:SetJustifyH("RIGHT")
 
                     row.waypointButton = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
@@ -2267,7 +2374,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 row.location:SetText(trainer.location and trainer.location ~= ""
                     and trainer.location or trainer.zone)
                 row:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
                     GameTooltip:SetText(trainer.location or trainer.zone)
                     if trainer.location then GameTooltip:AddLine(trainer.zone, 0.75, 0.75, 0.75) end
                     GameTooltip:Show()
@@ -2294,7 +2401,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                         }, label)
                     end)
                     row.waypointButton:SetScript("OnEnter", function(button)
-                        GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+                        GameTooltip:SetOwner(button, "ANCHOR_LEFT")
                         GameTooltip:SetText("Set waypoint for " .. npc.name)
                         GameTooltip:AddLine(string.format("Approximate zone coordinates: %.1f, %.1f",
                             npc.x, npc.y), 0.75, 0.75, 0.75)
@@ -2306,7 +2413,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.waypointButton:Disable()
                     row.waypointButton:SetScript("OnClick", nil)
                     row.waypointButton:SetScript("OnEnter", function(button)
-                        GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+                        GameTooltip:SetOwner(button, "ANCHOR_LEFT")
                         GameTooltip:SetText("Waypoint unavailable")
                         GameTooltip:AddLine("No verified map ID and coordinates are available for this NPC.",
                             0.75, 0.75, 0.75, true)

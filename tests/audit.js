@@ -49,15 +49,17 @@ function methods:HookScript(event, callback)
     self.scripts[event]=function(self,...) if old then old(self,...) end; callback(self,...) end
 end
 function methods:CreateTexture() return CreateFrame('Texture', nil, self) end
-function methods:CreateFontString() return CreateFrame('FontString', nil, self) end
+function methods:CreateFontString(name) return CreateFrame('FontString', name, self) end
 function methods:GetFontString()
     if not self.fontString then self.fontString=self:CreateFontString() end
     return self.fontString
 end
 function methods:SetText(text) self.text = tostring(text or '') end
+function methods:SetJustifyH(justify) self.justifyH=justify end
 function methods:SetTexture(texture) self.texture = texture end
 function methods:SetBackdrop(backdrop) self.backdrop=backdrop end
 function methods:SetBackdropColor(...) self.backdropColor={...} end
+function methods:SetOwner(owner,anchor) self.owner,self.anchor=owner,anchor end
 function methods:GetText() return self.text end
 function methods:SetChecked(value) self.checked = not not value end
 function methods:GetChecked() return self.checked end
@@ -107,11 +109,11 @@ function methods:SetMapID(mapID) self.mapID=mapID end
 for _, key in ipairs({
     'SetFrameStrata','SetClampedToScreen','SetMovable','EnableMouse','RegisterForDrag',
     'SetBackdropBorderColor','SetAlpha','RegisterForClicks',
-    'Cancel','SetJustifyH','SetWordWrap','SetTextColor','SetColorTexture','SetAllPoints',
+    'Cancel','SetWordWrap','SetTextColor','SetColorTexture','SetAllPoints',
     'ClearAllPoints','StartMoving','StopMovingOrSizing','SetDesaturated',
     'SetAutoFocus','SetMaxLetters','SetMultiLine','SetFontObject','SetTextInsets',
     'UpdateScrollChildRect','SetFocus','HighlightText','SetValue',
-    'SetMinMaxValues','SetValueStep','Raise','SetOwner','AddLine','SetHighlightTexture','SetHyperlink','SetDisabledFontObject'
+    'SetMinMaxValues','SetValueStep','Raise','AddLine','SetHighlightTexture','SetHyperlink','SetDisabledFontObject'
 }) do methods[key] = function() end end
 UIParent = CreateFrame('Frame'); UIParent:SetSize(1280,720)
 WorldFrame = CreateFrame('Frame'); GameTooltip = CreateFrame('Frame')
@@ -121,6 +123,7 @@ Minimap = CreateFrame('Frame'); Minimap:SetSize(140,140)
 UISpecialFrames, SlashCmdList, StaticPopupDialogs = {}, {}, {}
 ACCEPT, CANCEL = 'Accept','Cancel'
 function print(message) Messages[#Messages+1] = message end
+function StaticPopup_Show(name) LastPopup=name; return StaticPopupDialogs[name] end
 function Emit(event, ...)
     if event=='PLAYER_REGEN_DISABLED' or event=='PLAYER_REGEN_ENABLED' then
         Combat=event=='PLAYER_REGEN_DISABLED'
@@ -276,6 +279,7 @@ assert(RegisteredSettings and #UISpecialFrames==2)
 assert(NamedFrames.EasyFishingWindow.backdrop.bgFile=='Interface\\DialogFrame\\UI-DialogBox-Background')
 assert(NamedFrames.EasyFishingWindow.backdrop.edgeFile=='Interface\\DialogFrame\\UI-DialogBox-Border')
 assert(NamedFrames.EasyFishingWindow.backdropColor[1]==1 and NamedFrames.EasyFishingWindow.backdropColor[4]==1)
+assert(NamedFrames.EasyFishingResetHistoryButton and NamedFrames.EasyFishingResetSettingsButton)
 assert(NamedFrames.EasyFishingAtlasScrollFrame.width==620)
 assert(NamedFrames.EasyFishingTrainerScrollFrame.width==620)
 assert(NamedFrames.EasyFishingQuestRewardsScroll.width==300)
@@ -323,12 +327,23 @@ end
 assert(spellRowFound); MissingSpellTexture=false; Emit('GET_ITEM_INFO_RECEIVED')
 SlashCmdList.EASYFISHING('npcs')
 assert(NamedFrames.EasyFishingTrainerScrollFrame.width==620)
+local npcRowCount=0
+for _,frame in ipairs(Frames) do
+    if frame.waypointButton then
+        npcRowCount=npcRowCount+1
+        assert(frame.width==600 and frame.waypointButton.point[4]==-8)
+        assert(frame.width+frame.waypointButton.point[4]==592,
+            'every waypoint button must stay inside the 600px scroll child')
+    end
+end
+assert(npcRowCount==25)
 local npcWaypoint=false
 for _,frame in ipairs(Frames) do
     if frame.waypointButton and frame.width==600 then
-        assert(frame.waypointButton.point[4]==-8)
         assert(frame.coordinates.point[4]==414 and frame.location.width==168)
-        assert(frame.width+frame.waypointButton.point[4]==592)
+        frame.scripts.OnEnter(frame); assert(GameTooltip.anchor=='ANCHOR_LEFT')
+        frame.waypointButton.scripts.OnEnter(frame.waypointButton)
+        assert(GameTooltip.anchor=='ANCHOR_LEFT')
         frame.scripts.OnEnter(frame)
         assert(GameTooltip.text~=nil)
     end
@@ -537,6 +552,9 @@ assert(Addon.EnsureFishingStats().totalItems==2)
 assert(Addon.EnsureFishingStats().successfulCasts==1)
 assert(Addon.FishWatcher.width==380 and Addon.FishWatcher.height==260)
 assert(NamedFrames.EasyFishingWatcherLatest.itemID==6291)
+assert(NamedFrames.EasyFishingWatcherLatestLabel.justifyH=='CENTER')
+assert(NamedFrames.EasyFishingWatcherLatest.text.text=='Fish  x2')
+assert(NamedFrames.EasyFishingWatcherLatest.count.text=='')
 assert(NamedFrames.EasyFishingWatcherCatch1.itemID==6291)
 SlashCmdList.EASYFISHING('link fish'); assert(ChatText:find('6291',1,true))
 SlashCmdList.EASYFISHING('link gear'); assert(ChatText:find('6256',1,true))
@@ -561,6 +579,30 @@ assert(#journal==1 and journal[1].id=='6291' and journal[1].count==2)
 assert(journal[1].timeBuckets[2]==2 and journal[1].datesByDay['2026-10-02']==2)
 SlashCmdList.EASYFISHING('journal'); Addon.RefreshJournal()
 assert(NamedFrames.EasyFishingJournalPage:IsShown())
+assert(type(Addon.ShowFishAlmanacMap)=='function', 'almanac map action is exported during UI load')
+local almanacFishRow
+for _,frame in ipairs(Frames) do
+    if frame.kind=='Button' and frame.fishID=='16967' then almanacFishRow=frame; break end
+end
+assert(almanacFishRow and almanacFishRow.caught==false
+    and almanacFishRow.nameText.text=='Feralas Ahi', 'uncaught silhouettes retain their fish names')
+almanacFishRow.scripts.OnClick(almanacFishRow)
+NamedFrames.EasyFishingJournalWhereButton.scripts.OnClick()
+assert(WorldMapFrame.mapID==1444 and MapOpened==WorldMapFrame,
+    'Where to Catch opens the reported map for an uncaught fish')
+NamedFrames.EasyFishingJournalSearch:SetText('6291')
+NamedFrames.EasyFishingJournalSearch.scripts.OnTextChanged()
+assert(NamedFrames.EasyFishingJournalSearch.scripts.OnEnter==nil,
+    'search field must not show a tooltip over the selected fish details')
+local journalSummary
+for _,frame in ipairs(Frames) do
+    if frame.kind=='FontString' and frame.text:find('Character catches: 2',1,true) then
+        journalSummary=frame.text; break
+    end
+end
+assert(journalSummary and journalSummary:find('Zone share: Zone A 100.0%',1,true)
+    and journalSummary:find('Recent catches: 2026-10-02 (2)',1,true),
+    'almanac detail summarizes zone share and recent catch days')
 NamedFrames.EasyFishingJournalSearch:SetText('6291')
 NamedFrames.EasyFishingJournalSearch.scripts.OnTextChanged()
 for _,frame in ipairs(Frames) do
@@ -582,6 +624,8 @@ Addon.EnsureFishingStats().itemsByID['999']=missing
 FishingLoot=false; Emit('LOOT_OPENED'); Emit('LOOT_CLOSED'); FishingLoot=true
 assert(Addon.EnsureFishingStats().totalItems==2)
 SlashCmdList.EASYFISHING('locations')
+FindButton('Import / Export').scripts.OnEnter(FindButton('Import / Export'))
+assert(GameTooltip.text=='Share Fishing Locations')
 FindButton('Import / Export').scripts.OnClick()
 NamedFrames.EasyFishingWindow:Hide(); assert(not NamedFrames.EasyFishingLocationTransfer.shown)
 SlashCmdList.EASYFISHING('locations'); FindButton('Import / Export').scripts.OnClick()
@@ -600,6 +644,20 @@ local function SpotCount()
     local count=0; for _ in pairs(zoneStats.spots) do count=count+1 end; return count
 end
 assert(SpotCount()==2, 'distant same-cell spots remain separate; nearby catches merge')
+local tomTomWaypoints = {}
+TomTom = {
+    AddWaypoint=function(_,mapID,x,y,options)
+        table.insert(tomTomWaypoints, { mapID=mapID,x=x,y=y,options=options })
+        return #tomTomWaypoints
+    end,
+    RemoveWaypoint=function() end,
+    SetCrazyArrow=function() end,
+}
+Addon.OpenFishJournal(6291)
+NamedFrames.EasyFishingJournalWhereButton.scripts.OnClick()
+assert(WorldMapFrame.mapID==1438 and #tomTomWaypoints==2,
+    'Where to Catch opens the fish map and pins all observed hotspots with TomTom')
+TomTom=nil
 local spot
 for _,candidate in pairs(zoneStats.spots) do spot=candidate; break end
 local dialog=CreateFrame('Frame'); dialog.data={spot=spot}; dialog.EditBox=CreateFrame('EditBox',nil,dialog)
@@ -665,9 +723,26 @@ EasyFishingDB.enableSound=true; Addon.UpdateFishingSoundSettings()
 assert(CVars.Sound_EnableSFX=='1')
 assert(CVars.Sound_EnableAllSound=='1')
 Emit('PLAYER_LOGOUT')
+Channel=nil
 assert(CVars.Sound_EnableSFX=='0' and CVars.Sound_EnableSoundWhenGameIsInBG=='0')
 assert(CVars.Sound_EnableAllSound=='0')
 EasyFishingDB=false; Addon.InitializeSettings(); assert(EasyFishingDB.doubleClickDelay==0.4)
+local resetCharacterDB=Addon.GetCharacterDB()
+resetCharacterDB.fishingOutfitSetID=2
+resetCharacterDB.lastFishingSpot={mapID=1438,x=0.5,y=0.5,label='Reset me'}
+NamedFrames.EasyFishingResetHistoryButton.scripts.OnClick()
+assert(LastPopup=='EASYFISHING_RESET_HISTORY')
+StaticPopupDialogs.EASYFISHING_RESET_HISTORY.OnAccept()
+assert(Addon.EnsureFishingStats().totalItems==0 and next(Addon.EnsureFishingStats().zones)==nil
+    and resetCharacterDB.lastFishingSpot==nil and resetCharacterDB.fishingOutfitSetID==2,
+    'history reset clears catch data but preserves the selected outfit')
+EasyFishingDB.enableSound=false
+NamedFrames.EasyFishingResetSettingsButton.scripts.OnClick()
+assert(LastPopup=='EASYFISHING_RESET_SETTINGS')
+StaticPopupDialogs.EASYFISHING_RESET_SETTINGS.OnAccept()
+assert(EasyFishingDB.enableSound==true and EasyFishingDB.castClickMode=='DoubleClick'
+    and Addon.EnsureFishingStats().totalItems==0 and resetCharacterDB.fishingOutfitSetID==2,
+    'settings reset restores account defaults without clearing character history')
 `;
 
 for (const modern of [false, true]) {

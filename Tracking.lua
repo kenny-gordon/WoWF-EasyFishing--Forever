@@ -105,10 +105,11 @@ fishWatcherRate:SetWidth(356)
 fishWatcherRate:SetJustifyH("LEFT")
 fishWatcherRate:SetWordWrap(false)
 
-local fishWatcherLastCatchLabel = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+local fishWatcherLastCatchLabel = fishWatcher:CreateFontString(
+    "EasyFishingWatcherLatestLabel", "OVERLAY", "GameFontDisableSmall")
 fishWatcherLastCatchLabel:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -136)
 fishWatcherLastCatchLabel:SetWidth(356)
-fishWatcherLastCatchLabel:SetJustifyH("LEFT")
+fishWatcherLastCatchLabel:SetJustifyH("CENTER")
 fishWatcherLastCatchLabel:SetText("Latest Catch")
 
 local function CreateWatcherCatchRow(name, yOffset)
@@ -143,13 +144,15 @@ local function CreateWatcherCatchRow(name, yOffset)
     return row
 end
 
-local function SetWatcherCatch(row, itemID, itemLink, name, count)
+local function SetWatcherCatch(row, itemID, itemLink, name, count, inlineCount)
     row.itemID, row.itemLink, row.itemName = itemID, itemLink, name
     row:SetEnabled(itemID ~= nil)
-    row.text:SetText(name or "None yet")
+    row.text:SetWidth(inlineCount and 320 or 252)
+    row.text:SetText(name and inlineCount and string.format("%s  x%d", name, count or 0) or name or "None yet")
     local color = itemID and 1 or 0.6
     row.text:SetTextColor(color, color, color)
-    row.count:SetText(count and ("x" .. count) or "")
+    row.count:SetText(not inlineCount and count and ("x" .. count) or "")
+    row.count:SetShown(not inlineCount and count ~= nil)
     local icon
     if itemID then
         local getInfo = C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant
@@ -434,7 +437,7 @@ local function UpdateFishWatcher()
         "Session: %d items  |  Zone: %d items", fishingSession.totalItems, zoneItems))
     fishWatcherRate:SetText(string.format("%.1f items per hour", itemsPerHour))
     SetWatcherCatch(fishWatcherLastCatch, fishingSession.lastCatchItemID,
-        fishingSession.lastCatchItemLink, fishingSession.lastCatch, fishingSession.lastCatchQuantity)
+        fishingSession.lastCatchItemLink, fishingSession.lastCatch, fishingSession.lastCatchQuantity, true)
     local sessionItems = {}
     for _, item in pairs(fishingSession.itemsByID) do
         table.insert(sessionItems, item)
@@ -470,6 +473,21 @@ local function EndFishingSession()
     end
     fishingSession = nil
     fishWatcher:Hide()
+end
+
+local function ResetFishingHistory()
+    if isFishing or UnitChannelInfo("player") or InCombatLockdown() then
+        print("EasyFishing: stop fishing and leave combat before resetting this character's history.")
+        return false
+    end
+    EndFishingSession()
+    local characterDB = EF.GetCharacterDB()
+    characterDB.fishingStats = nil
+    characterDB.lastFishingSpot = nil
+    EnsureFishingStats()
+    UpdateFishWatcher()
+    if EF.RefreshJournal then EF.RefreshJournal() end
+    return true
 end
 
 local function GetFishingSessionTime()
@@ -753,5 +771,7 @@ EF.GetFishJournal = GetFishJournal
 EF.FormatFishingTime = FormatFishingTime
 EF.UpdateFishWatcher = UpdateFishWatcher
 EF.EndFishingSession = EndFishingSession
+EF.ResetFishingHistory = ResetFishingHistory
 EF.GetFishingSessionTime = GetFishingSessionTime
 EF.UpdateFishingSoundSettings = UpdateFishingSoundSettings
+EF.RestoreFishingSoundSettings = RestoreFishingSoundSettings

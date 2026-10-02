@@ -499,6 +499,21 @@ local function SetFishingPaused(value)
     if EF.UpdateFishingControls then EF.UpdateFishingControls() end
 end
 
+local function ResetAccountSettings()
+    if InCombatLockdown() or UnitChannelInfo("player") then
+        print("EasyFishing: stop fishing and leave combat before restoring settings.")
+        return false
+    end
+    if EF.RestoreFishingSoundSettings then EF.RestoreFishingSoundSettings() end
+    EasyFishingDB = {}
+    InitializeSettings()
+    MAX_DOUBLE_CLICK = DB_DEFAULTS.doubleClickDelay
+    SetFishingPaused(false)
+    if EF.RefreshOptions then EF.RefreshOptions() end
+    if EF.UpdateFishingControls then EF.UpdateFishingControls() end
+    return true
+end
+
 local function GetLureStatus()
     local active, remainingMS = GetWeaponEnchantInfo()
     if not IsFishingPoleEquipped() then active, remainingMS = false, 0 end
@@ -576,6 +591,7 @@ EF.BindCastAction = BindCastAction
 EF.IsLootOpen = function() return lootOpen end
 EF.IsFishingPaused = function() return fishingPaused end
 EF.SetFishingPaused = SetFishingPaused
+EF.ResetAccountSettings = ResetAccountSettings
 EF.CanStartFishing = CanStartFishing
 EF.GetLureStatus = GetLureStatus
 EF.GetMouseFishingStatus = GetMouseFishingStatus

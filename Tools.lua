@@ -18,6 +18,16 @@ local function SetTooltip(frame, title, detail)
     frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
+local function GetItemIcon(itemID)
+    local icon
+    if C_Item and C_Item.GetItemInfoInstant then
+        _, _, _, _, icon = C_Item.GetItemInfoInstant(tonumber(itemID) or itemID)
+    elseif type(GetItemInfoInstant) == "function" then
+        _, _, _, _, icon = GetItemInfoInstant(tonumber(itemID) or itemID)
+    end
+    return icon or "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+
 local function FishingState()
     if EF.IsFishingPaused() then return "Fishing paused" end
     if InCombatLockdown() then return "In combat" end
@@ -36,18 +46,54 @@ local function UpdateScrollLayout(scroll)
     if scroll.ScrollBar then scroll.ScrollBar:SetShown(scroll:GetVerticalScrollRange() > 0) end
 end
 
+local function GetFishAlmanacEntries()
+    local fishList = EF.GetFishJournal()
+    local fishByID = {}
+    for _, fish in ipairs(fishList) do
+        fish.caught = (tonumber(fish.lifetimeCount) or 0) > 0
+            or (tonumber(fish.locationCount) or 0) > 0
+        fishByID[fish.id] = fish
+    end
+    for _, entry in ipairs(EF.Data.FISH_ALMANAC or {}) do
+        local key = tostring(entry.id)
+        local fish = fishByID[key]
+        if not fish then
+            fish = {
+                id = key,
+                name = entry.name,
+                count = 0,
+                lifetimeCount = 0,
+                locationCount = 0,
+                locations = {},
+                timeBuckets = {},
+                datesByDay = {},
+                caught = false,
+            }
+            fishByID[key] = fish
+            table.insert(fishList, fish)
+        end
+        fish.almanac = entry
+        if not fish.name or fish.name:match("^Item %d+$") then fish.name = entry.name end
+    end
+    table.sort(fishList, function(first, second)
+        if first.caught ~= second.caught then return first.caught end
+        if first.count == second.count then return first.name < second.name end
+        return first.count > second.count
+    end)
+    return fishList
+end
+
 function EF.CreateJournalPage(window)
     local page = CreateFrame("Frame", "EasyFishingJournalPage", window)
     page:Hide()
     local heading = AddText(page, "GameFontNormalLarge", 200, page, "TOPLEFT", 16, -16)
-    heading:SetText("Fish Journal")
+    heading:SetText("Fish Almanac")
     local search = CreateFrame("EditBox", "EasyFishingJournalSearch", page, "InputBoxTemplate")
     search:SetSize(192, 20)
     search:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -12)
     search:SetAutoFocus(false)
     search:SetMaxLetters(80)
     search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    SetTooltip(search, "Search fish", "Fish name or item ID")
 
     local fishScroll = CreateFrame("ScrollFrame", "EasyFishingJournalFishScroll", page, "UIPanelScrollFrameTemplate")
     fishScroll:SetPoint("TOPLEFT", search, "BOTTOMLEFT", 0, -12)
@@ -56,12 +102,20 @@ function EF.CreateJournalPage(window)
     fishContent:SetSize(184, 1)
     fishScroll:SetScrollChild(fishContent)
 
-    local title = AddText(page, "GameFontNormalLarge", 410, page, "TOPLEFT", 238, -16)
+    local fishIcon = page:CreateTexture(nil, "ARTWORK")
+    fishIcon:SetSize(32, 32)
+    fishIcon:SetPoint("TOPLEFT", page, "TOPLEFT", 238, -14)
+    local title = AddText(page, "GameFontNormalLarge", 370, page, "TOPLEFT", 278, -16)
     local summary = AddText(page, "GameFontHighlightSmall", 410, title, "BOTTOMLEFT", 0, -10)
     summary:SetWordWrap(true)
     title:SetWordWrap(false)
+    local whereButton = CreateFrame("Button", "EasyFishingJournalWhereButton", page, "UIPanelButtonTemplate")
+    whereButton:SetSize(132, 24)
+    whereButton:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -10)
+    whereButton:SetText("Where to Catch")
+    SetTooltip(whereButton, "Where to Catch", "Open the reported habitat and show your recorded hotspots.")
     local locationScroll = CreateFrame("ScrollFrame", "EasyFishingJournalLocationScroll", page, "UIPanelScrollFrameTemplate")
-    locationScroll:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -16)
+    locationScroll:SetPoint("TOPLEFT", whereButton, "BOTTOMLEFT", 0, -10)
     locationScroll:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", -32, 60)
     local locationContent = CreateFrame("Frame", nil, locationScroll)
     locationContent:SetSize(392, 1)
@@ -71,12 +125,18 @@ function EF.CreateJournalPage(window)
     caveat:SetWordWrap(true)
 
     local fishRows, locationRows, selectedID, displayedID = {}, {}, nil, nil
+    local selectedFish
     local RefreshJournal
     local function ShowFish(fish)
+        selectedFish = fish
+        whereButton:SetEnabled(fish ~= nil)
         for _, row in ipairs(locationRows) do row:Hide() end
         if not fish or displayedID ~= fish.id then locationScroll:SetVerticalScroll(0) end
         displayedID = fish and fish.id or nil
         if not fish then
+            fishIcon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+            fishIcon:SetDesaturated(false)
+            fishIcon:SetAlpha(1)
             title:SetText(search:GetText():match("%S") and "No matching fish" or "No recorded catches")
             summary:SetText("")
             locationContent:SetHeight(1)
@@ -84,10 +144,42 @@ function EF.CreateJournalPage(window)
             return
         end
         selectedID = fish.id
+        fishIcon:SetTexture(GetItemIcon(fish.id))
+        fishIcon:SetDesaturated(not fish.caught)
+        fishIcon:SetAlpha(fish.caught and 1 or 0.35)
         title:SetText(fish.name)
         title:SetWordWrap(false)
+        if not fish.caught then
+            local entry = fish.almanac
+            summary:SetText(string.format("No personal catches yet\nReported waters: %s\n%s\nSource: %s. Exact hotspots appear after recorded catches.",
+                entry.zones or entry.zone, entry.hint, entry.source))
+            locationContent:SetHeight(1)
+            UpdateScrollLayout(locationScroll)
+            return
+        end
         local details = { string.format("Character catches: %d  |  At saved locations: %d\n%d locations",
             fish.lifetimeCount, fish.locationCount, #fish.locations) }
+        local zoneCounts, zones = {}, {}
+        for _, entry in ipairs(fish.locations) do
+            zoneCounts[entry.zone] = (zoneCounts[entry.zone] or 0) + entry.count
+        end
+        for zone, count in pairs(zoneCounts) do
+            table.insert(zones, { name = zone, count = count })
+        end
+        table.sort(zones, function(first, second)
+            if first.count == second.count then return first.name < second.name end
+            return first.count > second.count
+        end)
+        local zoneShares = {}
+        for index = 1, math.min(4, #zones) do
+            local zone = zones[index]
+            table.insert(zoneShares, string.format("%s %.1f%%", zone.name,
+                zone.count * 100 / fish.locationCount))
+        end
+        if #zones > 4 then table.insert(zoneShares, string.format("+%d more", #zones - 4)) end
+        if #zoneShares > 0 then
+            table.insert(details, "Zone share: " .. table.concat(zoneShares, "  |  "))
+        end
         local times = {}
         for bucket = 0, 3 do
             local count = fish.timeBuckets[bucket] or 0
@@ -103,6 +195,17 @@ function EF.CreateJournalPage(window)
         table.sort(days)
         if #days > 0 then
             table.insert(details, "Catch dates (UTC): " .. days[1] .. " to " .. days[#days])
+            local datedCatches = {}
+            for day, count in pairs(fish.datesByDay) do
+                table.insert(datedCatches, { day = day, count = count })
+            end
+            table.sort(datedCatches, function(first, second) return first.day > second.day end)
+            local recentDays = {}
+            for index = 1, math.min(5, #datedCatches) do
+                local entry = datedCatches[index]
+                table.insert(recentDays, string.format("%s (%d)", entry.day, entry.count))
+            end
+            table.insert(details, "Recent catches: " .. table.concat(recentDays, "  |  "))
             local monthNames = {}
             for month in pairs(months) do table.insert(monthNames, month) end
             table.sort(monthNames)
@@ -128,13 +231,15 @@ function EF.CreateJournalPage(window)
             local spot = entry.spot
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", locationContent, "TOPLEFT", 0, -((index - 1) * 42))
-            row:SetText(string.format("%s  %.1f, %.1f  |  %d", entry.zone,
-                (spot.x or 0) * 100, (spot.y or 0) * 100, entry.count))
+            local percent = fish.locationCount > 0 and entry.count * 100 / fish.locationCount or 0
+            row:SetText(string.format("%s  %.1f, %.1f  |  %d (%.1f%%)", entry.zone,
+                (spot.x or 0) * 100, (spot.y or 0) * 100, entry.count, percent))
             row:SetScript("OnClick", function()
                 EF.SetFishingWaypoint(spot, fish.name .. " - " .. entry.zone)
             end)
             SetTooltip(row, spot.label or entry.zone,
-                string.format("%s\n%d %s recorded here", spot.subzone or "", entry.count, fish.name))
+                string.format("%s\n%d of %d saved-location catches (%.1f%%)", spot.subzone or "",
+                    entry.count, fish.locationCount, percent))
             row:Show()
         end
         locationContent:SetHeight(math.max(1, #fish.locations * 42))
@@ -145,8 +250,12 @@ function EF.CreateJournalPage(window)
         for _, row in ipairs(fishRows) do row:Hide() end
         local query = (search:GetText() or ""):lower():match("^%s*(.-)%s*$")
         local fishList = {}
-        for _, fish in ipairs(EF.GetFishJournal()) do
-            if query == "" or fish.name:lower():find(query, 1, true) or fish.id:find(query, 1, true) then
+        for _, fish in ipairs(GetFishAlmanacEntries()) do
+            local habitatText = fish.almanac
+                and (fish.almanac.zone .. " " .. fish.almanac.habitat .. " "
+                    .. (fish.almanac.zones or "") .. " " .. fish.almanac.hint) or ""
+            if query == "" or fish.name:lower():find(query, 1, true)
+                or fish.id:find(query, 1, true) or habitatText:lower():find(query, 1, true) then
                 table.insert(fishList, fish)
             end
         end
@@ -154,17 +263,41 @@ function EF.CreateJournalPage(window)
         for index, fish in ipairs(fishList) do
             local row = fishRows[index]
             if not row then
-                row = CreateFrame("Button", nil, fishContent, "UIPanelButtonTemplate")
+                row = CreateFrame("Button", nil, fishContent)
                 row:SetSize(182, 32)
-                row:GetFontString():SetWidth(166)
-                row:GetFontString():SetWordWrap(false)
+                row:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+                row.icon = row:CreateTexture(nil, "ARTWORK")
+                row.icon:SetSize(22, 22)
+                row.icon:SetPoint("LEFT", row, "LEFT", 4, 0)
+                row.nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                row.nameText:SetPoint("LEFT", row.icon, "RIGHT", 5, 0)
+                row.nameText:SetWidth(105)
+                row.nameText:SetJustifyH("LEFT")
+                row.nameText:SetWordWrap(false)
+                row.countText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                row.countText:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+                row.countText:SetWidth(36)
+                row.countText:SetJustifyH("RIGHT")
                 fishRows[index] = row
             end
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", fishContent, "TOPLEFT", 0, -((index - 1) * 36))
-            row:SetText(fish.name)
+            row.fishID = fish.id
+            row.caught = fish.caught
+            row.icon:SetTexture(GetItemIcon(fish.id))
+            row.icon:SetDesaturated(not fish.caught)
+            row.icon:SetAlpha(fish.caught and 1 or 0.35)
+            row.nameText:SetText(fish.name)
+            row.nameText:SetTextColor(fish.id == selectedID and 1 or 0.9,
+                fish.id == selectedID and 0.82 or 0.9, fish.id == selectedID and 0 or 0.9)
+            row.countText:SetText(fish.caught and tostring(fish.count) or "")
             row:SetScript("OnClick", function() selectedID = fish.id; RefreshJournal() end)
-            SetTooltip(row, fish.name, string.format("Item %s  |  %d recorded", fish.id, fish.count))
+            if fish.caught then
+                SetTooltip(row, fish.name, string.format("Item %s  |  %d character catches  |  %d at saved locations",
+                    fish.id, fish.lifetimeCount, fish.locationCount))
+            else
+                SetTooltip(row, fish.name, "Not caught yet. " .. fish.almanac.hint .. "\n" .. fish.almanac.source)
+            end
             row:Show()
             if fish.id == selectedID then selected = fish end
         end
@@ -176,6 +309,9 @@ function EF.CreateJournalPage(window)
         UpdateScrollLayout(fishScroll)
         ShowFish(selected)
     end
+    whereButton:SetScript("OnClick", function()
+        if selectedFish then EF.ShowFishAlmanacMap(selectedFish) end
+    end)
     search:SetScript("OnTextChanged", function() fishScroll:SetVerticalScroll(0); RefreshJournal() end)
     page:SetScript("OnShow", RefreshJournal)
     page:RegisterEvent("LOOT_READY")
