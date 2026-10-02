@@ -231,12 +231,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local cbDC = MakeCheckbox(
             "Enable Click-to-Cast",
-            "Cast using the selected mouse button and click mode while holding a fishing pole.",
+            "Use the selected mouse button and click pattern to cast while holding a fishing pole.",
             secCast, -4, "enableDoubleClick")
 
         local modeLabel = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         modeLabel:SetPoint("TOPLEFT", cbDC, "BOTTOMLEFT", 26, -10)
-        modeLabel:SetText("Cast Click Mode")
+        modeLabel:SetText("Click Pattern")
 
         local UpdateSliderState
         local modeDropdown = CreateFrame("Frame", "EasyFishingCastModeDropdown",
@@ -270,10 +270,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         -- Button picker -----------------------------------------------------
         local btnLabel = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         btnLabel:SetPoint("TOPLEFT", modeDropdown, "BOTTOMLEFT", 16, -10)
-        btnLabel:SetText("Cast Button")
+        btnLabel:SetText("Cast Mouse Button")
         btnLabel:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Click-to-Move")
+            GameTooltip:SetText("Right-click casting")
             GameTooltip:AddLine(
                 "Right-click casting may conflict with Click-to-Move. Left Mouse is the default; choose another button if needed.",
                 1, 1, 1, true)
@@ -306,12 +306,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         -- Delay slider ------------------------------------------------------
         local sliderLabel = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         sliderLabel:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 16, -16)
-        sliderLabel:SetText("Double-Click Window")
+        sliderLabel:SetText("Double-Click Delay")
 
         local sliderDesc = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         sliderDesc:SetPoint("TOPLEFT", sliderLabel, "BOTTOMLEFT", 0, -4)
         sliderDesc:SetTextColor(0.7, 0.7, 0.7)
-        sliderDesc:SetText("How quickly you must double-click. Lower = faster.")
+        sliderDesc:SetText("Maximum time between the two clicks.")
 
         local slider = CreateFrame("Slider", "EasyFishingDelaySlider",
             settingsPage, "OptionsSliderTemplate")
@@ -357,8 +357,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local secLure = SectionHeader("Lures", slider, -24)
         local cbAutoLure = MakeCheckbox(
-            "Automatically Apply Lure",
-            "When your pole has no lure, the first selected cast action applies the weakest lure allowed by your Fishing skill. Repeat the selected click pattern to cast Fishing.",
+            "Apply Lure Automatically",
+            "If your pole has no lure, your first click applies the weakest lure your Fishing skill allows. Click again with the selected pattern to cast.",
             secLure, -4, "enableAutoLure")
 
         local secTracking = SectionHeader("Tracking", cbAutoLure, -10)
@@ -369,15 +369,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local secMovement = RightSectionHeader("Movement", -14)
         local cbDisableClickToMove = MakeCheckbox(
-            "Disable Click-to-Move While Fishing",
-            "Temporarily turns off Click-to-Move while a fishing pole is equipped and click-to-cast is enabled, then restores its previous setting.",
+            "Pause Click-to-Move While Fishing",
+            "Turns off Click-to-Move while your fishing pole is equipped and Click-to-Cast is on, then restores the previous setting.",
             secMovement, -4, "disableClickToMoveWhileFishing")
 
         -- Sound -------------------------------------------------------------
         local secSound = SectionHeader("Sound", cbDisableClickToMove, -10)
         local cbSound = MakeCheckbox(
-            "Enable Sound Automation",
-            "Turns on sound (and background sound) when you start fishing, then restores your original settings when done.",
+            "Turn Sound On While Fishing",
+            "Turns on Sound Effects and Background Sound while you fish, then restores your previous settings.",
             secSound, -4, "enableSound")
 
         local secOutfit = SectionHeader("Fishing Outfit", cbSound, -10)
@@ -385,13 +385,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         outfitHint:SetPoint("TOPLEFT", secOutfit, "BOTTOMLEFT", 0, -4)
         outfitHint:SetWidth(260)
         outfitHint:SetJustifyH("LEFT")
-        outfitHint:SetText("Choose a saved equipment set. EasyFishing remembers the previous saved set so you can restore it.")
+        outfitHint:SetText("Choose a saved equipment set for fishing. Restore your previous set when finished.")
 
         local outfitDropdown = CreateFrame("Frame", "EasyFishingOutfitDropdown",
             settingsPage, "UIDropDownMenuTemplate")
         outfitDropdown:SetPoint("TOPLEFT", outfitHint, "BOTTOMLEFT", -16, -6)
         UIDropDownMenu_SetWidth(outfitDropdown, 170)
-        local selectedOutfitName = "Select an outfit"
+        local selectedOutfitName = "Select a gear set"
         UIDropDownMenu_Initialize(outfitDropdown, function()
             local equipmentSetIDs = GetEquipmentSetIDs()
             if #equipmentSetIDs == 0 then
@@ -430,19 +430,19 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local equipOutfitButton = CreateFrame("Button", nil, settingsPage, "UIPanelButtonTemplate")
         equipOutfitButton:SetSize(92, 22)
         equipOutfitButton:SetPoint("TOPLEFT", outfitDropdown, "BOTTOMLEFT", 16, -2)
-        equipOutfitButton:SetText("Equip")
+        equipOutfitButton:SetText("Equip Gear")
         equipOutfitButton:SetScript("OnClick", EquipFishingOutfit)
 
         local restoreOutfitButton = CreateFrame("Button", nil, settingsPage, "UIPanelButtonTemplate")
         restoreOutfitButton:SetSize(92, 22)
         restoreOutfitButton:SetPoint("LEFT", equipOutfitButton, "RIGHT", 4, 0)
-        restoreOutfitButton:SetText("Restore")
+        restoreOutfitButton:SetText("Restore Gear")
         restoreOutfitButton:SetScript("OnClick", RestorePreviousEquipmentSet)
 
         local statisticsDivider = PageHeader(statisticsPage, "Fishing Statistics")
 
         local metricValues = {}
-        local metricLabels = { "Caught items", "Casts", "Fishing time", "Skill-ups" }
+        local metricLabels = { "Items Caught", "Casts", "Fishing Time", "Skill Gains" }
         for index, labelText in ipairs(metricLabels) do
             local xOffset = (index - 1) * 150
             local label = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -469,11 +469,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         statisticsCaveat:SetPoint("TOPLEFT", statisticsSummary, "BOTTOMLEFT", 0, -4)
         statisticsCaveat:SetWidth(PAGE_CONTENT_WIDTH)
         statisticsCaveat:SetWordWrap(true)
-        statisticsCaveat:SetText("Fishing loot is recorded only when the client identifies the loot window as fishing loot.")
+        statisticsCaveat:SetText("Only items shown in the client's Fishing loot window are counted.")
 
         local zoneStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         zoneStatsTitle:SetPoint("TOPLEFT", statisticsCaveat, "BOTTOMLEFT", 0, -18)
-        zoneStatsTitle:SetText("Recorded Items by Zone")
+        zoneStatsTitle:SetText("Items by Zone")
 
         local zoneStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         zoneStatsText:SetPoint("TOPLEFT", zoneStatsTitle, "BOTTOMLEFT", 0, -6)
@@ -483,7 +483,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local itemStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         itemStatsTitle:SetPoint("TOPLEFT", zoneStatsTitle, "TOPLEFT", 310, 0)
-        itemStatsTitle:SetText("Most Recorded Items")
+        itemStatsTitle:SetText("Top Catches")
 
         local itemStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         itemStatsText:SetPoint("TOPLEFT", itemStatsTitle, "BOTTOMLEFT", 0, -6)
@@ -536,7 +536,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             metricValues[3]:SetText(EF.FormatFishingTime(stats.totalFishingSeconds))
             metricValues[4]:SetText(tostring(stats.totalSkillUps))
             statisticsSummary:SetText(string.format(
-                "%d lifetime sessions | %d zones fished | %.1f items/hour overall",
+                "%d fishing sessions  |  %d zones  |  %.1f items per hour overall",
                 stats.totalSessions, zoneCount,
                 stats.totalFishingSeconds > 0 and stats.totalItems * 3600 / stats.totalFishingSeconds or 0))
             zoneStatsText:SetText(BuildStatsLines(
@@ -549,14 +549,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             itemStatsText:SetText(BuildStatsLines(stats.itemsByID, "No items recorded yet.", 12))
         end
 
-        local locationsDivider = PageHeader(locationsPage, "Fish Atlas")
+        local locationsDivider = PageHeader(locationsPage, "Fishing Locations")
 
         local locationsDescription = locationsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         locationsDescription:SetPoint("TOPLEFT", locationsDivider, "BOTTOMLEFT", 0, -14)
         locationsDescription:SetWidth(400)
         locationsDescription:SetJustifyH("LEFT")
         locationsDescription:SetWordWrap(true)
-        locationsDescription:SetText("Observed catches on this character, grouped by area. Click a row to place a waypoint. Locations are approximate and learned while fishing.")
+        locationsDescription:SetText("Your recorded fishing locations, grouped by area. Expand an area to see each location, then click one to set a map waypoint.")
 
         local atlasZoneFilter = "All zones"
         local atlasZoneDropdown = CreateFrame("Frame", "EasyFishingAtlasZoneDropdown",
@@ -636,9 +636,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             if #groups == 0 then
                 if atlasZoneFilter == "All zones" then
-                    locationsDescription:SetText("No fishing locations recorded yet. Confirmed catches will build this character's observed fish-by-area atlas.")
+                    locationsDescription:SetText("No fishing locations recorded yet. Your first confirmed catch will add one.")
                 else
-                    locationsDescription:SetText("No observed fishing locations in " .. atlasZoneFilter .. " yet.")
+                    locationsDescription:SetText("No fishing locations recorded in " .. atlasZoneFilter .. " yet.")
                 end
                 locationsContent:SetHeight(1)
                 locationsScroll:SetVerticalScroll(0)
@@ -646,7 +646,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 return
             end
             locationsDescription:SetText(string.format(
-                "Observed catches by area. Expand an area to see its locations; click a location to set a waypoint. Showing %d areas and %d approximate spots.",
+                "Your catches grouped by area. Expand an area to view saved locations, then select one for a map waypoint. Showing %d areas and %d locations.",
                 #groups, #spots))
 
             local displayRows = {}
@@ -803,7 +803,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                             and "Click to hide recorded locations."
                             or "Click to show recorded locations.", 1, 1, 1, true)
                     else
-                        GameTooltip:SetText("Observed catches at this location")
+                        GameTooltip:SetText("Fish caught at this location")
                         for _, fishItem in ipairs(fish) do
                             GameTooltip:AddLine(string.format("%s: %d", fishItem.name, fishItem.count), 1, 1, 1)
                             local timeParts = {}
@@ -817,7 +817,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                                 GameTooltip:AddLine("Server time: " .. table.concat(timeParts, ", "), 0.75, 0.75, 0.75, true)
                             end
                         end
-                        GameTooltip:AddLine("Coordinates are approximate catch positions, not verified pool boundaries.", 0.75, 0.75, 0.75, true)
+                        GameTooltip:AddLine("Coordinates are approximate, not exact fishing-pool boundaries.", 0.75, 0.75, 0.75, true)
                     end
                     GameTooltip:Show()
                 end)
@@ -867,33 +867,215 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         guideSkillText:SetJustifyH("LEFT")
         guideSkillText:SetWordWrap(true)
 
-        local trainingTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainingTitle:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 0, -18)
+        local guideTrainingTab = CreateFrame("Button", nil, guidePage, "UIPanelButtonTemplate")
+        guideTrainingTab:SetSize(112, 22)
+        guideTrainingTab:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 0, -12)
+        guideTrainingTab:SetText("Training")
+
+        local guideTrainersTab = CreateFrame("Button", nil, guidePage, "UIPanelButtonTemplate")
+        guideTrainersTab:SetSize(128, 22)
+        guideTrainersTab:SetPoint("LEFT", guideTrainingTab, "RIGHT", 6, 0)
+        guideTrainersTab:SetText("Trainer Directory")
+
+        local guideTrainingView = CreateFrame("Frame", nil, guidePage)
+        guideTrainingView:SetPoint("TOPLEFT", guideTrainingTab, "BOTTOMLEFT", 0, -10)
+        guideTrainingView:SetSize(PAGE_CONTENT_WIDTH, 380)
+
+        local guideTrainersView = CreateFrame("Frame", nil, guidePage)
+        guideTrainersView:SetAllPoints(guideTrainingView)
+        guideTrainersView:Hide()
+
+        local trainingTitle = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        trainingTitle:SetPoint("TOPLEFT", guideTrainingView, "TOPLEFT", 0, 0)
         trainingTitle:SetTextColor(1, 0.82, 0)
         trainingTitle:SetText("Training and Leveling")
 
-        local trainingText = guidePage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        trainingText:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -6)
-        trainingText:SetWidth(300)
-        trainingText:SetJustifyH("LEFT")
-        trainingText:SetWordWrap(true)
-
-        local campTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        campTitle:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 320, -18)
+        local campTitle = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        campTitle:SetPoint("TOPLEFT", guideTrainingView, "TOPLEFT", 320, 0)
         campTitle:SetTextColor(1, 0.82, 0)
         campTitle:SetText("Lures and Campsite Crafts")
 
-        local campText = guidePage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        campText:SetPoint("TOPLEFT", campTitle, "BOTTOMLEFT", 0, -6)
+        local trainingRankRows = {}
+        for index, rank in ipairs(EF.Data.FISHING_RANKS) do
+            local row = CreateFrame("Frame", nil, guideTrainingView)
+            row.rank = rank
+            row:SetSize(300, 72)
+            row:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -8 - ((index - 1) * 74))
+
+            row.title = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+            row.title:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+            row.title:SetText(rank.name)
+
+            row.status = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+            row.status:SetPoint("LEFT", row.title, "RIGHT", 6, 0)
+            row.status:SetText("CURRENT")
+            row.status:SetTextColor(1, 0.82, 0)
+            row.status:Hide()
+
+            row.range = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            row.range:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+            row.range:SetText(rank.range)
+
+            row.detail = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            row.detail:SetPoint("TOPLEFT", row.title, "BOTTOMLEFT", 0, -3)
+            row.detail:SetWidth(300)
+            row.detail:SetJustifyH("LEFT")
+            row.detail:SetWordWrap(true)
+            row.detail:SetText(rank.detail)
+
+            if index < #EF.Data.FISHING_RANKS then
+                row.rule = row:CreateTexture(nil, "ARTWORK")
+                row.rule:SetColorTexture(0.35, 0.35, 0.35, 0.45)
+                row.rule:SetSize(300, 1)
+                row.rule:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+            end
+            trainingRankRows[index] = row
+        end
+
+        local campText = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        campText:SetPoint("TOPLEFT", campTitle, "BOTTOMLEFT", 0, -8)
         campText:SetWidth(300)
         campText:SetJustifyH("LEFT")
         campText:SetWordWrap(true)
+
+        local trainerFilter = "All"
+        local trainerIntro = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        trainerIntro:SetPoint("TOPLEFT", guideTrainersView, "TOPLEFT", 0, -4)
+        trainerIntro:SetWidth(360)
+        trainerIntro:SetJustifyH("LEFT")
+
+        local trainerFactionDropdown = CreateFrame("Frame", "EasyFishingTrainerFactionDropdown",
+            guideTrainersView, "UIDropDownMenuTemplate")
+        trainerFactionDropdown:SetPoint("TOPRIGHT", guideTrainersView, "TOPRIGHT", 16, 2)
+        UIDropDownMenu_SetWidth(trainerFactionDropdown, 135)
+        UIDropDownMenu_SetText(trainerFactionDropdown, "All factions")
+
+        local trainerHeaderName = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        trainerHeaderName:SetPoint("TOPLEFT", trainerIntro, "BOTTOMLEFT", 6, -16)
+        trainerHeaderName:SetText("Trainer")
+
+        local trainerHeaderSide = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        trainerHeaderSide:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 171, 0)
+        trainerHeaderSide:SetText("Faction")
+
+        local trainerHeaderLocation = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        trainerHeaderLocation:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 247, 0)
+        trainerHeaderLocation:SetText("Location")
+
+        local trainerHeaderCoordinates = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        trainerHeaderCoordinates:SetPoint("TOPRIGHT", trainerHeaderName, "TOPLEFT", 572, 0)
+        trainerHeaderCoordinates:SetText("Coordinates")
+
+        local trainerScroll = CreateFrame("ScrollFrame", "EasyFishingTrainerScrollFrame",
+            guideTrainersView, "UIPanelScrollFrameTemplate")
+        trainerScroll:SetPoint("TOPLEFT", trainerHeaderName, "BOTTOMLEFT", -6, -6)
+        trainerScroll:SetSize(PAGE_CONTENT_WIDTH, 320)
+        local trainerContent = CreateFrame("Frame", nil, trainerScroll)
+        trainerContent:SetSize(590, 1)
+        trainerScroll:SetScrollChild(trainerContent)
+
+        local trainerRows = {}
+        local function RefreshTrainerList()
+            for _, row in ipairs(trainerRows) do
+                row:Hide()
+            end
+
+            local trainers = {}
+            for _, trainer in ipairs(EF.Data.FISHING_TRAINERS) do
+                if trainerFilter == "All" or trainer.side == trainerFilter
+                    or (trainer.side == "Both" and trainerFilter ~= "Neutral") then
+                    table.insert(trainers, trainer)
+                end
+            end
+            table.sort(trainers, function(first, second)
+                if first.zone == second.zone then
+                    return first.name < second.name
+                end
+                return first.zone < second.zone
+            end)
+
+            trainerIntro:SetText(string.format(
+                "Showing %d trainers. Coordinates are approximate zone-map positions.", #trainers))
+            trainerContent:SetHeight(math.max(1, #trainers * 30))
+            trainerScroll:UpdateScrollChildRect()
+            trainerScroll:SetVerticalScroll(0)
+
+            for index, trainer in ipairs(trainers) do
+                local row = trainerRows[index]
+                if not row then
+                    row = CreateFrame("Frame", nil, trainerContent)
+                    row:SetSize(590, 28)
+
+                    row.background = row:CreateTexture(nil, "BACKGROUND")
+                    row.background:SetAllPoints(row)
+
+                    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -7)
+                    row.name:SetWidth(165)
+                    row.name:SetJustifyH("LEFT")
+
+                    row.side = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.side:SetPoint("TOPLEFT", row, "TOPLEFT", 177, -7)
+                    row.side:SetWidth(68)
+                    row.side:SetJustifyH("LEFT")
+
+                    row.location = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.location:SetPoint("TOPLEFT", row, "TOPLEFT", 253, -7)
+                    row.location:SetWidth(210)
+                    row.location:SetJustifyH("LEFT")
+
+                    row.coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.coordinates:SetPoint("TOPRIGHT", row, "TOPRIGHT", -12, -7)
+                    row.coordinates:SetWidth(100)
+                    row.coordinates:SetJustifyH("RIGHT")
+                    trainerRows[index] = row
+                end
+
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 30))
+                row.background:SetColorTexture(0.55, 0.48, 0.3, index % 2 == 0 and 0.07 or 0.025)
+                row.name:SetText(trainer.name)
+                row.side:SetText(trainer.side == "Both" and "Shared" or trainer.side)
+                if trainer.side == "Alliance" then
+                    row.side:SetTextColor(0.45, 0.72, 1)
+                elseif trainer.side == "Horde" then
+                    row.side:SetTextColor(1, 0.45, 0.35)
+                else
+                    row.side:SetTextColor(1, 0.82, 0)
+                end
+                row.location:SetText(trainer.location .. ", " .. trainer.zone)
+                row.coordinates:SetText(string.format("%.1f, %.1f", trainer.x, trainer.y))
+                row:Show()
+            end
+        end
+
+        UIDropDownMenu_Initialize(trainerFactionDropdown, function()
+            local options = {
+                { label = "All factions", value = "All" },
+                { label = "Alliance", value = "Alliance" },
+                { label = "Horde", value = "Horde" },
+                { label = "Neutral", value = "Neutral" },
+            }
+            for _, option in ipairs(options) do
+                local value, label = option.value, option.label
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = label
+                info.checked = trainerFilter == value
+                info.func = function()
+                    trainerFilter = value
+                    UIDropDownMenu_SetText(trainerFactionDropdown, label)
+                    CloseDropDownMenus()
+                    RefreshTrainerList()
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
 
         local guideSource = guidePage:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         guideSource:SetPoint("BOTTOMLEFT", guidePage, "BOTTOMLEFT", 16, 18)
         guideSource:SetWidth(PAGE_CONTENT_WIDTH)
         guideSource:SetJustifyH("LEFT")
-        guideSource:SetText("Source: Wowhead Forever Fishing and Camping guides, Patch 1.60.1. Forever is in beta; routes and data may change.")
+        guideSource:SetText("Source: Wowhead Forever Fishing and Camping guides, Patch 1.60.1. Trainer coordinates are zone-map estimates. Forever is in beta; routes and data may change.")
 
         local function RefreshForeverGuide()
             local skill = GetFishingSkill()
@@ -906,7 +1088,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 elseif skill < 150 then
                     guidance = "Journeyman: capital cities reach a 100% catch rate at 75. Train Expert at 150 from Old Man Heming."
                 elseif skill < 225 then
-                    guidance = "Expert: Dustwallow Marsh and Stranglethorn Vale need 225 effective skill for a 100% catch rate. Artisan begins at skill 225 and character level 35."
+                    guidance = "Expert: Buy The Bass and You in Booty Bay for 1 gold. Fishing skill plus gear and lure bonuses must reach 225 for a 100% catch rate in Dustwallow Marsh or Stranglethorn Vale. Artisan requires skill 225 and character level 35."
                 elseif skill < 300 then
                     guidance = "Artisan: Nat Pagle's quest requires character level 35 and skill 225. The guide has no complete 225-300 route."
                 else
@@ -917,12 +1099,21 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 guideSkillText:SetText("Fishing skill is unavailable. Train Fishing to see your current bracket and next step.")
             end
 
-            trainingText:SetText(table.concat({
-                "1-75 Apprentice: Fishing trainer. Start in any starter zone; skill 25 reaches a 100% catch rate there.",
-                "75-150 Journeyman: Fishing trainer. Capital cities reach 100% catch rate at skill 75.",
-                "150-225 Expert: buy The Bass and You from Old Man Heming in Booty Bay for 1 gold. Dustwallow Marsh or Stranglethorn Vale need 225 effective skill for a 100% catch rate.",
-                "225-300 Artisan: Nat Pagle quest at character level 35 and Fishing 225. The guide has no complete 225-300 route yet.",
-            }, "\n\n"))
+            for _, row in ipairs(trainingRankRows) do
+                local isCurrent = skill and skill >= row.rank.minimumSkill
+                    and (not row.rank.nextTraining or skill < row.rank.nextTraining)
+                if isCurrent then
+                    row.status:Show()
+                    row.title:SetTextColor(1, 0.82, 0)
+                    row.range:SetTextColor(1, 0.82, 0)
+                    row.detail:SetTextColor(1, 1, 1)
+                else
+                    row.status:Hide()
+                    row.title:SetTextColor(0.72, 0.72, 0.72)
+                    row.range:SetTextColor(0.72, 0.72, 0.72)
+                    row.detail:SetTextColor(0.78, 0.78, 0.78)
+                end
+            end
 
             campText:SetText(table.concat({
                 "Shiny Bauble +25 (skill 1); use below 25 while fishing starter zones.",
@@ -933,6 +1124,23 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 "Fishing Hut: skill 300, blueprint; campsite supports rare fish and Fishing lures for 1 hour.",
             }, "\n\n"))
         end
+
+        guideTrainingTab:SetScript("OnClick", function()
+            guideTrainingView:Show()
+            guideTrainersView:Hide()
+            guideTrainingTab:Disable()
+            guideTrainersTab:Enable()
+        end)
+        guideTrainersTab:SetScript("OnClick", function()
+            guideTrainingView:Hide()
+            guideTrainersView:Show()
+            guideTrainingTab:Enable()
+            guideTrainersTab:Disable()
+            RefreshTrainerList()
+        end)
+        guideTrainingTab:Disable()
+        guideTrainersTab:Enable()
+        RefreshTrainerList()
 
         settingsTab:SetScript("OnClick", function()
             statisticsPage:Hide()

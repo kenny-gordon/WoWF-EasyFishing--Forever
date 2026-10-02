@@ -14,7 +14,7 @@ local fishingSession = nil
 local fishingSessionEndTimer = nil
 
 local fishWatcher = CreateFrame("Frame", "EasyFishingFishWatcher", UIParent, "BackdropTemplate")
-fishWatcher:SetSize(320, 110)
+fishWatcher:SetSize(360, 148)
 fishWatcher:SetFrameStrata("MEDIUM")
 fishWatcher:SetClampedToScreen(true)
 fishWatcher:SetMovable(true)
@@ -29,30 +29,70 @@ if fishWatcher.SetBackdrop then
         tile = true, tileSize = 16, edgeSize = 12,
         insets = { left = 3, right = 3, top = 3, bottom = 3 },
     })
-    fishWatcher:SetBackdropColor(0, 0, 0, 0.8)
-    fishWatcher:SetBackdropBorderColor(0.45, 0.45, 0.45, 1)
+    fishWatcher:SetBackdropColor(0.015, 0.02, 0.02, 0.9)
+    fishWatcher:SetBackdropBorderColor(0.45, 0.35, 0.16, 1)
 end
 
 local fishWatcherTitle = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-fishWatcherTitle:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 10, -8)
-fishWatcherTitle:SetWidth(300)
+fishWatcherTitle:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 10, -10)
+fishWatcherTitle:SetWidth(130)
 fishWatcherTitle:SetJustifyH("LEFT")
-fishWatcherTitle:SetWordWrap(true)
+fishWatcherTitle:SetText("FISH WATCHER")
+
+local fishWatcherZone = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+fishWatcherZone:SetPoint("TOPRIGHT", fishWatcher, "TOPRIGHT", -10, -10)
+fishWatcherZone:SetWidth(210)
+fishWatcherZone:SetJustifyH("RIGHT")
+fishWatcherZone:SetWordWrap(false)
+
+local fishWatcherDivider = fishWatcher:CreateTexture(nil, "ARTWORK")
+fishWatcherDivider:SetColorTexture(0.45, 0.35, 0.16, 0.65)
+fishWatcherDivider:SetSize(340, 1)
+fishWatcherDivider:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 10, -29)
+
+local fishWatcherMetricValues = {}
+local metricNames = { "SKILL", "TIME", "CASTS", "SKILL GAINS" }
+for index, metricName in ipairs(metricNames) do
+    local xOffset = 10 + (index - 1) * 82
+    local label = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    label:SetPoint("TOPLEFT", fishWatcherDivider, "BOTTOMLEFT", xOffset - 10, -8)
+    label:SetWidth(78)
+    label:SetJustifyH("LEFT")
+    label:SetText(metricName)
+
+    local value = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
+    value:SetWidth(78)
+    value:SetJustifyH("LEFT")
+    value:SetTextColor(1, 0.82, 0)
+    fishWatcherMetricValues[index] = value
+end
 
 local fishWatcherSummary = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherSummary:SetPoint("TOPLEFT", fishWatcherTitle, "BOTTOMLEFT", 0, -4)
-fishWatcherSummary:SetWidth(300)
+fishWatcherSummary:SetPoint("TOPLEFT", fishWatcherMetricValues[1], "BOTTOMLEFT", 0, -7)
+fishWatcherSummary:SetWidth(340)
 fishWatcherSummary:SetJustifyH("LEFT")
+fishWatcherSummary:SetWordWrap(true)
+
+local fishWatcherLastCatchLabel = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+fishWatcherLastCatchLabel:SetPoint("TOPLEFT", fishWatcherSummary, "BOTTOMLEFT", 0, -7)
+fishWatcherLastCatchLabel:SetWidth(76)
+fishWatcherLastCatchLabel:SetJustifyH("LEFT")
+fishWatcherLastCatchLabel:SetText("LAST CATCH")
 
 local fishWatcherLastCatch = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherLastCatch:SetPoint("TOPLEFT", fishWatcherSummary, "BOTTOMLEFT", 0, -3)
-fishWatcherLastCatch:SetWidth(300)
+fishWatcherLastCatch:SetPoint("TOPLEFT", fishWatcherLastCatchLabel, "TOPLEFT", 82, 0)
+fishWatcherLastCatch:SetWidth(258)
 fishWatcherLastCatch:SetJustifyH("LEFT")
 fishWatcherLastCatch:SetWordWrap(true)
 
+local fishWatcherBreakdownLabel = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+fishWatcherBreakdownLabel:SetPoint("TOPLEFT", fishWatcherLastCatch, "BOTTOMLEFT", -82, -6)
+fishWatcherBreakdownLabel:SetText("THIS SESSION'S CATCHES")
+
 local fishWatcherBreakdown = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherBreakdown:SetPoint("TOPLEFT", fishWatcherLastCatch, "BOTTOMLEFT", 0, -3)
-fishWatcherBreakdown:SetWidth(300)
+fishWatcherBreakdown:SetPoint("TOPLEFT", fishWatcherBreakdownLabel, "BOTTOMLEFT", 0, -2)
+fishWatcherBreakdown:SetWidth(340)
 fishWatcherBreakdown:SetJustifyH("LEFT")
 fishWatcherBreakdown:SetWordWrap(true)
 
@@ -228,16 +268,18 @@ local function UpdateFishWatcher()
     local stats = EnsureFishingStats()
     local zoneStats = EnsureZoneFishingStats(stats, zoneName)
     local zoneItems = zoneStats.totalItems
-    fishWatcherTitle:SetText("Fishing Watcher - " .. zoneName)
+    fishWatcherZone:SetText(zoneName)
     local elapsedSeconds = math.max(1, GetTime() - fishingSession.startedAt)
     local itemsPerHour = fishingSession.totalItems * 3600 / elapsedSeconds
     local fishingSkill = EF.GetFishingSkill()
+    fishWatcherMetricValues[1]:SetText(fishingSkill and tostring(fishingSkill) or "?")
+    fishWatcherMetricValues[2]:SetText(FormatFishingTime(elapsedSeconds))
+    fishWatcherMetricValues[3]:SetText(tostring(fishingSession.casts))
+    fishWatcherMetricValues[4]:SetText(tostring(fishingSession.skillUps))
     fishWatcherSummary:SetText(string.format(
-        "Fishing skill %s | Time %s\nCasts %d | Skill-ups %d | %.1f items/hr\nSession %d items | Zone %d",
-        fishingSkill and tostring(fishingSkill) or "?",
-        FormatFishingTime(elapsedSeconds), fishingSession.casts,
-        fishingSession.skillUps, itemsPerHour, fishingSession.totalItems, zoneItems))
-    fishWatcherLastCatch:SetText("Last catch: " .. (fishingSession.lastCatch or "None yet"))
+        "%.1f items per hour  |  This session: %d items  |  This zone: %d items",
+        itemsPerHour, fishingSession.totalItems, zoneItems))
+    fishWatcherLastCatch:SetText(fishingSession.lastCatch or "None yet")
     local sessionItems = {}
     for _, item in pairs(fishingSession.itemsByID) do
         table.insert(sessionItems, item)
@@ -256,12 +298,11 @@ local function UpdateFishWatcher()
     if #sessionItems > 2 then
         table.insert(catchSummary, string.format("+%d more", #sessionItems - 2))
     end
-    fishWatcherBreakdown:SetText("Items caught this session: " .. (#catchSummary > 0 and table.concat(catchSummary, ", ") or "None yet"))
-    local contentHeight = fishWatcherTitle:GetStringHeight()
-        + fishWatcherSummary:GetStringHeight()
-        + fishWatcherLastCatch:GetStringHeight()
-        + fishWatcherBreakdown:GetStringHeight() + 34
-    fishWatcher:SetHeight(math.max(110, contentHeight))
+    fishWatcherBreakdown:SetText(#catchSummary > 0 and table.concat(catchSummary, ", ") or "None yet")
+    local wrappedHeight = math.max(0, fishWatcherSummary:GetStringHeight() - 12)
+        + math.max(0, fishWatcherLastCatch:GetStringHeight() - 12)
+        + math.max(0, fishWatcherBreakdown:GetStringHeight() - 12)
+    fishWatcher:SetHeight(148 + wrappedHeight)
     fishWatcher:Show()
 end
 
