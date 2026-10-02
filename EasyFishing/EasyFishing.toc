@@ -6,6 +6,7 @@
 ## IconTexture: Interface\AddOns\EasyFishing\EasyFishing.tga
 ## SavedVariables: EasyFishingDB
 
+Data.lua
 Core.lua
 Tracking.lua
 UI.lua

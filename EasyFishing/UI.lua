@@ -10,6 +10,85 @@ local GetEquipmentSetIDs = EF.GetEquipmentSetIDs
 local EquipFishingOutfit = EF.EquipFishingOutfit
 local RestorePreviousEquipmentSet = EF.RestorePreviousEquipmentSet
 local GetFishingSkill = EF.GetFishingSkill
+
+local function OpenChatWithLinks(text)
+    if not text or text == "" then
+        print("EasyFishing: nothing to link yet.")
+    elseif type(ChatFrame_OpenChat) == "function" then
+        ChatFrame_OpenChat(text)
+    elseif type(ChatEdit_InsertLink) == "function" then
+        ChatEdit_InsertLink(text)
+    else
+        print("EasyFishing: chat link insertion is unavailable.")
+    end
+end
+
+local function GetItemHyperlink(itemID)
+    if not itemID then return nil end
+    if type(GetItemInfo) == "function" then
+        local _, itemLink = GetItemInfo(itemID)
+        if itemLink then return itemLink end
+    end
+    if C_Item and C_Item.GetItemLink then
+        return C_Item.GetItemLink(itemID)
+    end
+end
+
+local function ShareLastFish()
+    local stats = EF.EnsureFishingStats()
+    if not stats.lastCatchItemLink then
+        print("EasyFishing: catch a fish before linking it.")
+        return
+    end
+    OpenChatWithLinks(stats.lastCatchItemLink)
+end
+
+local function ShareFishingLocation()
+    local spot = EasyFishingDB.lastFishingSpot
+    if spot and C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
+        and UiMapPoint and UiMapPoint.CreateFromCoordinates
+        and C_Map.CanSetUserWaypointOnMap(spot.mapID) then
+        local point = UiMapPoint.CreateFromCoordinates(spot.mapID, spot.x, spot.y)
+        if point then
+            C_Map.SetUserWaypoint(point)
+            if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+                C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+            end
+        end
+    end
+
+    local hyperlink = C_Map and C_Map.GetUserWaypointHyperlink and C_Map.GetUserWaypointHyperlink()
+    if not hyperlink or hyperlink == "" then
+        print("EasyFishing: select an atlas location or set a map waypoint first.")
+        return
+    end
+    local label = spot and spot.label and (spot.label .. " ") or ""
+    OpenChatWithLinks(label .. hyperlink)
+end
+
+local function ShareFishingOutfit()
+    local setID = tonumber(EasyFishingDB.fishingOutfitSetID)
+    if not setID or not C_EquipmentSet or not C_EquipmentSet.GetItemIDs then
+        print("EasyFishing: select an available fishing outfit first.")
+        return
+    end
+
+    local setName = C_EquipmentSet.GetEquipmentSetInfo(setID)
+    local setItems = C_EquipmentSet.GetItemIDs(setID) or {}
+    local links = { "Fishing outfit " .. (setName or "") .. ":" }
+    for _, slotID in ipairs(EF.Data.CHAT_GEAR_SLOT_IDS) do
+        local itemLink = GetItemHyperlink(setItems[slotID])
+        if itemLink then
+            table.insert(links, itemLink)
+        end
+    end
+    if #links == 1 then
+        print("EasyFishing: outfit items are not cached yet; try again in a moment.")
+        return
+    end
+    OpenChatWithLinks(table.concat(links, " "))
+end
+
 local mainFrame = CreateFrame("Frame")
 mainFrame:RegisterEvent("PLAYER_LOGIN")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -281,7 +360,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             "Show the current fishing zone, session time, item count, and most recent catch.",
             secTracking, -4, "showFishWatcher")
 
-        local secMovement = SectionHeader("Movement", secTracking, -46)
         local secMovement = RightSectionHeader("Movement", -14)
         local cbDisableClickToMove = MakeCheckbox(
             "Disable Click-to-Move While Fishing",
@@ -362,9 +440,25 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         statisticsTitle:SetPoint("TOPLEFT", 16, -16)
         statisticsTitle:SetText("Fishing Statistics")
 
+        local metricValues = {}
+        local metricLabels = { "Caught items", "Casts", "Fishing time", "Skill-ups" }
+        for index, labelText in ipairs(metricLabels) do
+            local xOffset = (index - 1) * 136
+            local label = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            label:SetPoint("TOPLEFT", statisticsTitle, "BOTTOMLEFT", xOffset, -12)
+            label:SetWidth(128)
+            label:SetTextColor(0.76, 0.78, 0.78)
+            label:SetText(labelText)
+
+            local value = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+            value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
+            value:SetWidth(128)
+            value:SetText("0")
+            metricValues[index] = value
+        end
+
         local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-            local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        statisticsSummary:SetPoint("TOPLEFT", statisticsTitle, "BOTTOMLEFT", 0, -8)
+        statisticsSummary:SetPoint("TOPLEFT", metricValues[1], "BOTTOMLEFT", 0, -4)
         statisticsSummary:SetWidth(550)
         statisticsSummary:SetJustifyH("LEFT")
 
@@ -379,20 +473,18 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         zoneStatsTitle:SetText("Recorded Items by Zone")
 
         local zoneStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        local zoneStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         zoneStatsText:SetPoint("TOPLEFT", zoneStatsTitle, "BOTTOMLEFT", 0, -6)
-        zoneStatsText:SetWidth(550)
+        zoneStatsText:SetWidth(260)
         zoneStatsText:SetJustifyH("LEFT")
         zoneStatsText:SetWordWrap(true)
 
         local itemStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        itemStatsTitle:SetPoint("TOPLEFT", zoneStatsText, "BOTTOMLEFT", 0, -14)
+        itemStatsTitle:SetPoint("TOPLEFT", zoneStatsTitle, "TOPLEFT", 280, 0)
         itemStatsTitle:SetText("Most Recorded Items")
 
         local itemStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        local itemStatsText = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         itemStatsText:SetPoint("TOPLEFT", itemStatsTitle, "BOTTOMLEFT", 0, -6)
-        itemStatsText:SetWidth(550)
+        itemStatsText:SetWidth(260)
         itemStatsText:SetJustifyH("LEFT")
         itemStatsText:SetWordWrap(true)
 
@@ -436,17 +528,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             for _ in pairs(stats.zones) do
                 zoneCount = zoneCount + 1
             end
+            metricValues[1]:SetText(tostring(stats.totalItems))
+            metricValues[2]:SetText(tostring(stats.totalCasts))
+            metricValues[3]:SetText(EF.FormatFishingTime(stats.totalFishingSeconds))
+            metricValues[4]:SetText(tostring(stats.totalSkillUps))
             statisticsSummary:SetText(string.format(
-                "Lifetime sessions: %d | Casts: %d | Fishing time: %s\nSkill-ups: %d | Recorded items: %d | Zones fished: %d",
-                stats.totalSessions, stats.totalCasts,
-                EF.FormatFishingTime(stats.totalFishingSeconds), stats.totalSkillUps,
-                stats.totalItems, zoneCount))
+                "%d lifetime sessions | %d zones fished | %.1f items/hour overall",
+                stats.totalSessions, zoneCount,
+                stats.totalFishingSeconds > 0 and stats.totalItems * 3600 / stats.totalFishingSeconds or 0))
             zoneStatsText:SetText(BuildStatsLines(
-                stats.zones, "No zone totals recorded yet.", 10, function(entry)
+                stats.zones, "No zone totals recorded yet.", 8, function(entry)
                     local zone = entry.data
-                    return string.format("%s: %d items | %d sessions | %d casts | %s time | %d skill-ups",
+                    return string.format("%s: %d items\n  %d sessions | %d casts | %s",
                         entry.name, entry.count, zone.sessions, zone.casts,
-                        EF.FormatFishingTime(zone.fishingSeconds), zone.skillUps)
+                        EF.FormatFishingTime(zone.fishingSeconds))
                 end))
             itemStatsText:SetText(BuildStatsLines(stats.itemsByID, "No items recorded yet.", 12))
         end
@@ -457,9 +552,17 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local locationsDescription = locationsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         locationsDescription:SetPoint("TOPLEFT", locationsTitle, "BOTTOMLEFT", 0, -8)
-        locationsDescription:SetWidth(550)
+        locationsDescription:SetWidth(330)
         locationsDescription:SetJustifyH("LEFT")
+        locationsDescription:SetWordWrap(true)
         locationsDescription:SetText("Observed catches on this character, grouped by area. Click a row to place a waypoint. Locations are approximate and learned while fishing.")
+
+        local atlasZoneFilter = "All zones"
+        local atlasZoneDropdown = CreateFrame("Frame", "EasyFishingAtlasZoneDropdown",
+            locationsPage, "UIDropDownMenuTemplate")
+        atlasZoneDropdown:SetPoint("TOPRIGHT", locationsPage, "TOPRIGHT", -18, -34)
+        UIDropDownMenu_SetWidth(atlasZoneDropdown, 145)
+        UIDropDownMenu_SetText(atlasZoneDropdown, atlasZoneFilter)
 
         local locationsScroll = CreateFrame("ScrollFrame", "EasyFishingAtlasScrollFrame",
             locationsPage, "UIPanelScrollFrameTemplate")
@@ -470,7 +573,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         locationsScroll:SetScrollChild(locationsContent)
 
         local locationRows = {}
-        local function RefreshLocationsPage()
+        local RefreshLocationsPage
+        RefreshLocationsPage = function()
             for _, row in ipairs(locationRows) do
                 row:Hide()
             end
@@ -478,9 +582,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             local spots = {}
             local stats = EF.EnsureFishingStats()
             for zoneName, zoneStats in pairs(stats.zones) do
-                for _, spot in pairs(zoneStats.spots or {}) do
-                    if type(spot) == "table" and type(spot.itemsByID) == "table" then
-                        table.insert(spots, { zone = zoneName, spot = spot })
+                if atlasZoneFilter == "All zones" or zoneName == atlasZoneFilter then
+                    for _, spot in pairs(zoneStats.spots or {}) do
+                        if type(spot) == "table" and type(spot.itemsByID) == "table" then
+                            table.insert(spots, { zone = zoneName, spot = spot })
+                        end
                     end
                 end
             end
@@ -495,7 +601,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end)
 
             if #spots == 0 then
-                locationsDescription:SetText("No fishing locations recorded yet. Confirmed catches will build this character's observed fish-by-area atlas.")
+                if atlasZoneFilter == "All zones" then
+                    locationsDescription:SetText("No fishing locations recorded yet. Confirmed catches will build this character's observed fish-by-area atlas.")
+                else
+                    locationsDescription:SetText("No observed fishing locations in " .. atlasZoneFilter .. " yet.")
+                end
                 locationsContent:SetHeight(1)
                 locationsScroll:SetVerticalScroll(0)
                 locationsScroll:UpdateScrollChildRect()
@@ -589,6 +699,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                         print("EasyFishing: unable to set the fishing waypoint.")
                         return
                     end
+                    EasyFishingDB.lastFishingSpot = {
+                        mapID = spot.mapID,
+                        x = spot.x,
+                        y = spot.y,
+                        label = entry.zone .. " / " .. areaName,
+                    }
                     if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
                         C_SuperTrack.SetSuperTrackedUserWaypoint(true)
                     end
@@ -601,11 +717,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     self:SetBackdropColor(0.10, 0.12, 0.11, 0.9)
                     self:SetBackdropBorderColor(0.78, 0.58, 0.18, 1)
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                                    row:SetScript("OnLeave", function(self)
-                                        self:SetBackdropColor(0.04, 0.05, 0.05, 0.72)
-                                        self:SetBackdropBorderColor(0.24, 0.27, 0.27, 1)
-                                        GameTooltip:Hide()
-                                    end)
                     GameTooltip:SetText("Observed catches at this location")
                     for _, fishItem in ipairs(fish) do
                         GameTooltip:AddLine(string.format("%s: %d", fishItem.name, fishItem.count), 1, 1, 1)
@@ -628,6 +739,30 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
 
+        UIDropDownMenu_Initialize(atlasZoneDropdown, function()
+            local zones = { "All zones" }
+            for zoneName in pairs(EF.EnsureFishingStats().zones) do
+                table.insert(zones, zoneName)
+            end
+            table.sort(zones, function(first, second)
+                if first == "All zones" then return true end
+                if second == "All zones" then return false end
+                return first < second
+            end)
+            for _, zoneName in ipairs(zones) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = zoneName
+                info.checked = atlasZoneFilter == zoneName
+                info.func = function()
+                    atlasZoneFilter = zoneName
+                    UIDropDownMenu_SetText(atlasZoneDropdown, zoneName)
+                    CloseDropDownMenus()
+                    RefreshLocationsPage()
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+
         local guideTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         guideTitle:SetPoint("TOPLEFT", 16, -16)
         guideTitle:SetText("Fishing Guide")
@@ -636,6 +771,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         guideSkillText:SetPoint("TOPLEFT", guideTitle, "BOTTOMLEFT", 0, -8)
         guideSkillText:SetWidth(550)
         guideSkillText:SetJustifyH("LEFT")
+        guideSkillText:SetWordWrap(true)
 
         local trainingTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainingTitle:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 0, -18)
@@ -668,9 +804,23 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local function RefreshForeverGuide()
             local skill = GetFishingSkill()
             if skill then
-                guideSkillText:SetText(string.format("Your Fishing skill: %d", skill))
+                local guidance
+                if skill < 25 then
+                    guidance = "Apprentice: use Shiny Bauble below 25 in starter zones. Next training at 75."
+                elseif skill < 75 then
+                    guidance = "Apprentice: starter zones reach a 100% catch rate at 25. Next training at 75."
+                elseif skill < 150 then
+                    guidance = "Journeyman: capital cities reach a 100% catch rate at 75. Train Expert at 150 from Old Man Heming."
+                elseif skill < 225 then
+                    guidance = "Expert: Dustwallow Marsh and Stranglethorn Vale need 225 effective skill for a 100% catch rate. Artisan begins at skill 225 and character level 35."
+                elseif skill < 300 then
+                    guidance = "Artisan: Nat Pagle's quest requires character level 35 and skill 225. The guide has no complete 225-300 route."
+                else
+                    guidance = "Artisan skill cap reached. The guide has no detailed leveling route above 225."
+                end
+                guideSkillText:SetText(string.format("Fishing skill: %d\n%s", skill, guidance))
             else
-                guideSkillText:SetText("Your Fishing skill is unavailable.")
+                guideSkillText:SetText("Fishing skill is unavailable. Train Fishing to see your current bracket and next step.")
             end
 
             trainingText:SetText(table.concat({
@@ -770,7 +920,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 ShowOptionsPage("atlas")
             elseif command == "guide" then
                 ShowOptionsPage("guide")
-                            print("EasyFishing commands: /ef [menu|stats|atlas|guide|watch|equip|restore]")
+            elseif command == "link fish" then
+                ShareLastFish()
+            elseif command == "link location" then
+                ShareFishingLocation()
+            elseif command == "link gear" then
+                ShareFishingOutfit()
             elseif command == "watch" then
                 EasyFishingDB.showFishWatcher = not EasyFishingDB.showFishWatcher
                 EF.UpdateFishWatcher()
@@ -780,7 +935,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             elseif command == "restore" then
                 RestorePreviousEquipmentSet()
             else
-                print("EasyFishing commands: /ef [menu|stats|atlas|watch|equip|restore]")
+                print("EasyFishing commands: /ef [menu|stats|atlas|guide|watch|equip|restore|link fish|link location|link gear]")
             end
         end
 

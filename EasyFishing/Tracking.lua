@@ -117,6 +117,21 @@ local function EnsureZoneFishingStats(stats, zoneName)
     return zoneStats
 end
 
+local function GetWorldPosition(mapID, position)
+    if not C_Map or not C_Map.GetWorldPosFromMapPos then return end
+    local continentID, worldPosition = C_Map.GetWorldPosFromMapPos(mapID, position)
+    if not continentID or not worldPosition then return end
+
+    local worldX, worldY
+    if worldPosition.GetXY then
+        worldX, worldY = worldPosition:GetXY()
+    else
+        worldX, worldY = worldPosition.x, worldPosition.y
+    end
+    if type(worldX) ~= "number" or type(worldY) ~= "number" then return end
+    return continentID, worldX, worldY
+end
+
 local function RecordFishingSpot(zoneStats, itemKey, itemName, quantity)
     if not C_Map or not C_Map.GetBestMapForUnit or not C_Map.GetPlayerMapPosition then
         return
@@ -129,15 +144,50 @@ local function RecordFishingSpot(zoneStats, itemKey, itemName, quantity)
     local x, y = position:GetXY()
     if not x or not y then return end
 
+    local continentID, worldX, worldY = GetWorldPosition(mapID, position)
     local cellX = math.min(199, math.max(0, math.floor(x * 200)))
     local cellY = math.min(199, math.max(0, math.floor(y * 200)))
     local spotKey = string.format("%d:%d:%d", mapID, cellX, cellY)
     local spot = zoneStats.spots[spotKey]
+
+    if not spot and continentID then
+        for candidateKey, candidate in pairs(zoneStats.spots) do
+            if type(candidate) == "table" and candidate.mapID == mapID
+                and candidate.continentID == continentID then
+                local candidateX, candidateY = candidate.worldX, candidate.worldY
+                if not candidateX or not candidateY then
+                    local oldPosition = { x = candidate.x, y = candidate.y }
+                    local oldContinentID
+                    oldContinentID, candidateX, candidateY = GetWorldPosition(mapID, oldPosition)
+                    if oldContinentID ~= continentID then
+                        candidateX, candidateY = nil, nil
+                    else
+                        candidate.continentID = oldContinentID
+                        candidate.worldX = candidateX
+                        candidate.worldY = candidateY
+                    end
+                end
+                if candidateX and candidateY then
+                    local deltaX = worldX - candidateX
+                    local deltaY = worldY - candidateY
+                    if deltaX * deltaX + deltaY * deltaY <= 225 then
+                        spotKey = candidateKey
+                        spot = candidate
+                        break
+                    end
+                end
+            end
+        end
+    end
+
     if type(spot) ~= "table" then
         spot = {
             mapID = mapID,
             x = x,
             y = y,
+            continentID = continentID,
+            worldX = worldX,
+            worldY = worldY,
             subzone = GetSubZoneText() or "",
             totalItems = 0,
             itemsByID = {},
@@ -337,6 +387,9 @@ local function RecordFishingLoot()
             zoneStats.totalItems = zoneStats.totalItems + quantity
             fishingSession.totalItems = fishingSession.totalItems + quantity
             fishingSession.lastCatch = itemName
+                stats.lastCatchItemID = itemID
+                stats.lastCatchItemLink = itemLink
+                stats.lastCatchName = itemName
             recordedCatch = true
         end
     end

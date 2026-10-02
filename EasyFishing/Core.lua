@@ -1,40 +1,34 @@
 local addonName, EF = ...
 EF = EF or {}
 _G.EasyFishing = EF
+local DATA = EF.Data
 
 local MIN_DOUBLE_CLICK = 0.05
 local MAX_DOUBLE_CLICK = 0.4
-local lastClickTime    = 0
+local lastClickTime = 0
 local pendingClearTimer = nil
 local clearBindingOnMouseUp = false
-local FISHING_SESSION_IDLE = 120
-
--- ---------------------------------------------------------------------------
--- Saved variables
--- ---------------------------------------------------------------------------
 
 local DB_DEFAULTS = {
     enableDoubleClick = true,
-    enableAutoLure    = true,
-    enableSound       = true,
-    enableCatchAlert  = false,
+    enableAutoLure = true,
+    enableSound = true,
+    enableCatchAlert = false,
     disableClickToMoveWhileFishing = false,
     showFishWatcher = true,
-    doubleClickDelay  = 0.4,
-    doubleClickButton = "LeftButton", -- see BUTTON_OPTIONS below
-    castClickMode     = "DoubleClick",
-    fishWatcherX      = 0,
-    fishWatcherY      = 160,
+    doubleClickDelay = 0.4,
+    doubleClickButton = "LeftButton",
+    castClickMode = "DoubleClick",
+    fishWatcherX = 0,
+    fishWatcherY = 160,
 }
 
--- All mouse buttons we can bind to. `binding` is the WoW key name used by
--- SetOverrideBindingClick; `key` is what GLOBAL_MOUSE_DOWN reports.
 local BUTTON_OPTIONS = {
-    { key = "LeftButton",   binding = "BUTTON1", label = "Left Mouse" },
-    { key = "RightButton",  binding = "BUTTON2", label = "Right Mouse" },
+    { key = "LeftButton", binding = "BUTTON1", label = "Left Mouse" },
+    { key = "RightButton", binding = "BUTTON2", label = "Right Mouse" },
     { key = "MiddleButton", binding = "BUTTON3", label = "Middle Mouse" },
-    { key = "Button4",      binding = "BUTTON4", label = "Mouse Button 4" },
-    { key = "Button5",      binding = "BUTTON5", label = "Mouse Button 5" },
+    { key = "Button4", binding = "BUTTON4", label = "Mouse Button 4" },
+    { key = "Button5", binding = "BUTTON5", label = "Mouse Button 5" },
 }
 
 local CAST_MODE_OPTIONS = {
@@ -43,20 +37,16 @@ local CAST_MODE_OPTIONS = {
 }
 
 local BUTTON_BY_KEY = {}
-for _, opt in ipairs(BUTTON_OPTIONS) do
-    BUTTON_BY_KEY[opt.key] = opt
+for _, option in ipairs(BUTTON_OPTIONS) do
+    BUTTON_BY_KEY[option.key] = option
 end
 
 local function GetButtonOption(key)
     return BUTTON_BY_KEY[key] or BUTTON_BY_KEY["RightButton"]
 end
 
--- ---------------------------------------------------------------------------
--- Small API wrappers
--- ---------------------------------------------------------------------------
-
 local function IsFishingPoleEquipped()
-    local mainHand = GetInventoryItemID("player", 16)
+    local mainHand = GetInventoryItemID("player", DATA.MAIN_HAND_SLOT)
     if not mainHand then return false end
     local classID, subclassID
     if C_Item and C_Item.GetItemInfoInstant then
@@ -66,15 +56,21 @@ local function IsFishingPoleEquipped()
     elseif GetItemInfo then
         _, _, _, _, _, _, _, _, _, _, _, classID, subclassID = GetItemInfo(mainHand)
     end
-    return classID == 2 and (subclassID == 20 or subclassID == 25)
+    return classID == DATA.FISHING_ITEM_CLASS_ID and DATA.FISHING_POLE_SUBCLASS_IDS[subclassID]
 end
 
 local function GetFishingSpellName()
     local name
     if C_Spell and C_Spell.GetSpellName then
-        name = C_Spell.GetSpellName(7620) or C_Spell.GetSpellName(131474)
+        for _, spellID in ipairs(DATA.FISHING_SPELL_IDS) do
+            name = C_Spell.GetSpellName(spellID)
+            if name then break end
+        end
     elseif GetSpellInfo then
-        name = GetSpellInfo(7620) or GetSpellInfo(131474)
+        for _, spellID in ipairs(DATA.FISHING_SPELL_IDS) do
+            name = GetSpellInfo(spellID)
+            if name then break end
+        end
     end
     return name or "Fishing"
 end
@@ -82,15 +78,6 @@ end
 local function IsFishingChannelActive()
     return UnitChannelInfo("player") == GetFishingSpellName()
 end
-
-local LURES = {
-    { id = 6529, minimumSkill = 1 },
-    { id = 6530, minimumSkill = 50 },
-    { id = 6811, minimumSkill = 50 },
-    { id = 6532, minimumSkill = 100 },
-    { id = 7307, minimumSkill = 100 },
-    { id = 6533, minimumSkill = 100 },
-}
 
 local function GetFishingSkill()
     if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
@@ -104,7 +91,6 @@ local function GetFishingSkill()
     end
 
     if not GetNumSkillLines or not GetSkillLineInfo then return nil end
-
     local fishingName = GetFishingSpellName()
     for index = 1, GetNumSkillLines() do
         local skillName, isHeader, _, rank = GetSkillLineInfo(index)
@@ -126,7 +112,7 @@ end
 local function GetAvailableLures()
     local available = {}
     local skill = GetFishingSkill() or 0
-    for _, lure in ipairs(LURES) do
+    for _, lure in ipairs(DATA.LURES) do
         local count = GetItemCountWrapper(lure.id)
         if count > 0 and skill >= lure.minimumSkill then
             table.insert(available, { id = lure.id, count = count })
@@ -327,7 +313,7 @@ local function BindCastAction(buttonName)
     if lureID then
         autoLureButton:SetAttribute("type", "item")
         autoLureButton:SetAttribute("item", "item:" .. lureID)
-        autoLureButton:SetAttribute("target-slot", 16)
+        autoLureButton:SetAttribute("target-slot", DATA.MAIN_HAND_SLOT)
         autoLureButton:SetAttribute("spell", nil)
     else
         autoLureButton:SetAttribute("type", "spell")
