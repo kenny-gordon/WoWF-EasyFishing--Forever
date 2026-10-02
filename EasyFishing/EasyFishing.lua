@@ -100,6 +100,7 @@ end
 
 local lureMenu = CreateFrame("Frame", "EasyFishingLureMenu", UIParent, "BackdropTemplate")
 lureMenu:SetFrameStrata("DIALOG")
+lureMenu:SetClampedToScreen(true)
 lureMenu:Hide()
 tinsert(UISpecialFrames, "EasyFishingLureMenu")
 
@@ -138,7 +139,10 @@ local function UpdateLureMenu(availableLures)
         btn:Hide()
     end
 
-    if #availableLures == 0 then return false end
+    if #availableLures == 0 then
+        lureMenu:Hide()
+        return false
+    end
 
     local btnSize = 28
     local padding = 5
@@ -146,7 +150,7 @@ local function UpdateLureMenu(availableLures)
     lureMenu:SetSize(width, btnSize + 2 * padding)
 
     lureMenuCloseBtn:ClearAllPoints()
-    lureMenuCloseBtn:SetPoint("CENTER", lureMenu, "TOPRIGHT", 0, 0)
+    lureMenuCloseBtn:SetPoint("TOPRIGHT", lureMenu, "TOPRIGHT", -3, -3)
 
     local spellName = GetFishingSpellName()
 
@@ -194,6 +198,7 @@ local function UpdateLureMenu(availableLures)
         end
 
         btn.itemID = lure.id
+        btn:ClearAllPoints()
         btn:SetPoint("LEFT", lureMenu, "LEFT",
             padding + (i - 1) * (btnSize + padding), 0)
 
@@ -275,7 +280,6 @@ local isFishing = false
 
 local mainFrame = CreateFrame("Frame")
 mainFrame:RegisterEvent("PLAYER_LOGIN")
-mainFrame:RegisterEvent("PLAYER_LOGOUT")
 
 mainFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_LOGIN" then
@@ -444,11 +448,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             Settings.RegisterAddOnCategory(category)
         end
 
-        -- Remember the user's BG-sound preference --------------------------
-        if EasyFishingDB.userBGSetting == nil then
-            EasyFishingDB.userBGSetting = GetCVarBG()
-        end
-
         -- ------------------------------------------------------------------
         -- Global mouse handler
         -- ------------------------------------------------------------------
@@ -476,6 +475,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             if InCombatLockdown() then return end
             if not IsFishingPoleEquipped() then return end
             if UnitExists("mouseover") then return end
+            if UnitExists("target") then return end
             if GetUnitSpeed("player") > 0 then return end
 
             local now   = GetTime()
@@ -509,12 +509,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end)
 
-    elseif event == "PLAYER_LOGOUT" then
-        -- Snapshot the user's current BG-sound setting so we can restore it
-        -- the next time they log in.
-        if not isFishing then
-            EasyFishingDB.userBGSetting = GetCVarBG()
-        end
     end
 end)
 
@@ -525,6 +519,7 @@ end)
 local soundFrame = CreateFrame("Frame")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+local userBGSetting = nil
 
 soundFrame:SetScript("OnEvent", function(_, event, unit)
     if unit ~= "player" then return end
@@ -545,6 +540,9 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
                 SetCVarSound("1")
             end
             local curBG = GetCVarBG()
+            if userBGSetting == nil then
+                userBGSetting = curBG
+            end
             if curBG ~= "1" then
                 SetCVarBG("1")
             end
@@ -562,6 +560,7 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
                 if #lures > 0 and UpdateLureMenu(lures) then
                     local x, y = GetCursorPosition()
                     local scale = UIParent:GetEffectiveScale()
+                    lureMenu:ClearAllPoints()
                     lureMenu:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT",
                         (x / scale) + 40, (y / scale) - 20)
                     lureMenu:Show()
@@ -574,13 +573,14 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
         isFishing = false
 
         if EasyFishingDB then
-            if EasyFishingDB.userBGSetting ~= nil then
-                SetCVarBG(EasyFishingDB.userBGSetting)
-            end
             if EasyFishingDB.userSoundSetting ~= nil then
                 SetCVarSound(EasyFishingDB.userSoundSetting)
                 EasyFishingDB.userSoundSetting = nil
             end
+        end
+        if userBGSetting ~= nil then
+            SetCVarBG(userBGSetting)
+            userBGSetting = nil
         end
     end
 end)
