@@ -218,6 +218,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             return heading
         end
 
+        local function UpdateScrollBarVisibility(scrollFrame)
+            local scrollBar = scrollFrame.ScrollBar
+            if not scrollBar and scrollFrame.GetName then
+                scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+            end
+            if not scrollBar then return end
+
+            if scrollFrame:GetVerticalScrollRange() > 0 then
+                scrollBar:Show()
+            else
+                scrollBar:Hide()
+            end
+        end
+
         local divider = PageHeader(settingsPage, "EasyFishing: Forever")
 
         local function SectionHeader(text, anchor, yOff)
@@ -774,6 +788,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 locationsContent:SetHeight(1)
                 locationsScroll:SetVerticalScroll(0)
                 locationsScroll:UpdateScrollChildRect()
+                UpdateScrollBarVisibility(locationsScroll)
                 return
             end
             locationsDescription:SetText(string.format(
@@ -804,6 +819,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
             locationsContent:SetHeight(math.max(1, #displayRows * 54))
             locationsScroll:UpdateScrollChildRect()
+            UpdateScrollBarVisibility(locationsScroll)
             locationsScroll:SetVerticalScroll(scrollOffset or 0)
 
             for index, entry in ipairs(displayRows) do
@@ -1230,72 +1246,40 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             guideGearView, "Find Fish and Quest Rewards", guideGearView, "TOPLEFT", 320, 0, 300)
 
         local findFish = EF.Data.FISHING_ABILITIES[1]
-        local findFishRow = CreateFrame("Frame", nil, guideGearView)
-        findFishRow:SetSize(300, 40)
-        findFishRow:SetPoint("TOPLEFT", rewardsTitle, "BOTTOMLEFT", 0, -8)
-        findFishRow:EnableMouse(true)
-
-        local findFishIcon = findFishRow:CreateTexture(nil, "ARTWORK")
-        findFishIcon:SetSize(24, 24)
-        findFishIcon:SetPoint("TOPLEFT", findFishRow, "TOPLEFT", 0, -2)
-        findFishIcon:SetTexture(GetSpellIcon(findFish.id)
-            or "Interface\\Icons\\INV_Misc_QuestionMark")
-
-        local findFishName = findFishRow:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        findFishName:SetPoint("TOPLEFT", findFishIcon, "TOPRIGHT", 6, 0)
-        findFishName:SetWidth(190)
-        findFishName:SetJustifyH("LEFT")
-        findFishName:SetText(findFish.name)
-
-        local findFishButton = CreateFrame("Button", nil, guideGearView, "UIPanelButtonTemplate")
-        findFishButton:SetSize(94, 22)
-        findFishButton:SetPoint("TOPRIGHT", findFishRow, "TOPRIGHT", 0, 0)
-        findFishButton:SetText("Spellbook")
-        findFishButton:SetScript("OnClick", function()
-            if type(ToggleSpellBook) == "function" then
-                ToggleSpellBook(BOOKTYPE_SPELL or "spell")
-            elseif SpellBookFrame then
-                SpellBookFrame:Show()
-            else
-                print("EasyFishing: the spellbook is unavailable on this client.")
-            end
-        end)
-        findFishButton:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(findFish.name)
-            GameTooltip:AddLine(findFish.details, 1, 1, 1, true)
-            GameTooltip:AddLine("Cooldown: " .. findFish.cooldown, 0.75, 0.75, 0.75)
-            GameTooltip:AddLine("Drag Find Fish from the spellbook to your action bar.", 0.75, 0.75, 0.75, true)
-            GameTooltip:Show()
-        end)
-        findFishButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        local findFishDetail = findFishRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        findFishDetail:SetPoint("TOPLEFT", findFishName, "BOTTOMLEFT", 0, -1)
-        findFishDetail:SetWidth(244)
-        findFishDetail:SetJustifyH("LEFT")
-        findFishDetail:SetText("Fishing skill 1+  |  Pools show on minimap")
-
-        findFishRow:SetScript("OnEnter", function()
-            GameTooltip:SetOwner(findFishRow, "ANCHOR_RIGHT")
-            GameTooltip:SetText(findFish.name)
-            GameTooltip:AddLine(findFish.details, 1, 1, 1, true)
-            GameTooltip:AddLine("Cooldown: " .. findFish.cooldown, 0.75, 0.75, 0.75)
-            GameTooltip:Show()
-        end)
-        findFishRow:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        local rewardEntries = {
+            {
+                kind = "ability",
+                id = findFish.id,
+                iconType = "spell",
+                name = findFish.name,
+                value = "Spellbook",
+                detail = "Skill 1+  |  Pools on minimap  |  " .. findFish.cooldown .. " cooldown",
+                details = findFish.details,
+            },
+        }
+        for _, quest in ipairs(EF.Data.FISHING_QUEST_REWARDS) do
+            table.insert(rewardEntries, {
+                kind = "quest",
+                id = quest.rewardItemID or quest.rewardSpellID,
+                iconType = quest.rewardSpellID and "spell" or "item",
+                name = quest.rewardName or quest.reward,
+                value = quest.rewardValue or "Reward",
+                detail = quest.sourceLabel or quest.name,
+                quest = quest,
+            })
+        end
 
         local rewardScroll = CreateFrame("ScrollFrame", "EasyFishingQuestRewardsScroll",
             guideGearView, "UIPanelScrollFrameTemplate")
-        rewardScroll:SetPoint("TOPLEFT", findFishRow, "BOTTOMLEFT", -2, -8)
-        rewardScroll:SetSize(300, math.min(#EF.Data.FISHING_QUEST_REWARDS, 8) * 36)
+        rewardScroll:SetPoint("TOPLEFT", rewardsTitle, "BOTTOMLEFT", 0, -8)
+        rewardScroll:SetSize(300, math.min(#rewardEntries, 9) * 36)
         local rewardContent = CreateFrame("Frame", nil, rewardScroll)
-        rewardContent:SetSize(280, math.max(1, #EF.Data.FISHING_QUEST_REWARDS * 36))
+        rewardContent:SetSize(280, #rewardEntries * 36)
         rewardScroll:SetScrollChild(rewardContent)
 
         local rewardRows = {}
-        for index, quest in ipairs(EF.Data.FISHING_QUEST_REWARDS) do
-            local row = CreateFrame("Frame", nil, rewardContent)
+        for index, entry in ipairs(rewardEntries) do
+            local row = CreateFrame("Button", nil, rewardContent)
             row:SetSize(278, 34)
             row:SetPoint("TOPLEFT", rewardContent, "TOPLEFT", 0, -((index - 1) * 36))
             row:EnableMouse(true)
@@ -1303,8 +1287,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetSize(24, 24)
             row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
-            local rewardIcon = quest.rewardItemID and GetItemTexture(quest.rewardItemID)
-                or (quest.rewardSpellID and GetSpellIcon(quest.rewardSpellID))
+            local rewardIcon = entry.iconType == "spell"
+                and GetSpellIcon(entry.id) or GetItemTexture(entry.id)
             row.icon:SetTexture(rewardIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
 
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -1312,31 +1296,52 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.name:SetWidth(160)
             row.name:SetJustifyH("LEFT")
             row.name:SetWordWrap(false)
-            row.name:SetText(quest.rewardName or quest.reward)
+            row.name:SetText(entry.name)
 
             row.value = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             row.value:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
             row.value:SetWidth(82)
             row.value:SetJustifyH("RIGHT")
-            row.value:SetText(quest.rewardValue or "Reward")
+            row.value:SetText(entry.value)
             row.value:SetTextColor(1, 0.82, 0)
 
             row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
             row.detail:SetWidth(244)
             row.detail:SetJustifyH("LEFT")
-            row.detail:SetText(quest.sourceLabel or quest.name)
+            row.detail:SetText(entry.detail)
 
             row:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText(quest.name)
-                GameTooltip:AddLine(quest.details, 1, 1, 1, true)
-                GameTooltip:AddLine("Reward: " .. quest.reward, 0.75, 0.75, 0.75, true)
+                if entry.kind == "ability" then
+                    GameTooltip:SetText(entry.name)
+                    GameTooltip:AddLine(entry.details, 1, 1, 1, true)
+                    GameTooltip:AddLine("Cooldown: " .. entry.value, 0.75, 0.75, 0.75)
+                    GameTooltip:AddLine("Click to open the spellbook.", 0.75, 0.75, 0.75)
+                else
+                    GameTooltip:SetText(entry.quest.name)
+                    GameTooltip:AddLine(entry.quest.details, 1, 1, 1, true)
+                    GameTooltip:AddLine("Reward: " .. entry.quest.reward, 0.75, 0.75, 0.75, true)
+                end
                 GameTooltip:Show()
             end)
             row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            if entry.kind == "ability" then
+                row:SetScript("OnClick", function()
+                    if type(ToggleSpellBook) == "function" then
+                        ToggleSpellBook(BOOKTYPE_SPELL or "spell")
+                    elseif SpellBookFrame then
+                        SpellBookFrame:Show()
+                    else
+                        print("EasyFishing: the spellbook is unavailable on this client.")
+                    end
+                end)
+            end
             rewardRows[index] = row
         end
+        rewardScroll:UpdateScrollChildRect()
+        UpdateScrollBarVisibility(rewardScroll)
+        rewardScroll:SetVerticalScroll(0)
 
         local trainerFilter = "All"
         local trainerIntro = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -1419,6 +1424,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 trainerEmptyText:Hide()
             end
             trainerScroll:UpdateScrollChildRect()
+            UpdateScrollBarVisibility(trainerScroll)
             trainerScroll:SetVerticalScroll(0)
 
             for index, trainer in ipairs(trainers) do
