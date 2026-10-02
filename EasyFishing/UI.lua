@@ -9,6 +9,7 @@ local ClearBinding = EF.ClearBinding
 local GetEquipmentSetIDs = EF.GetEquipmentSetIDs
 local EquipFishingOutfit = EF.EquipFishingOutfit
 local RestorePreviousEquipmentSet = EF.RestorePreviousEquipmentSet
+local GetFishingSkill = EF.GetFishingSkill
 local mainFrame = CreateFrame("Frame")
 mainFrame:RegisterEvent("PLAYER_LOGIN")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -59,9 +60,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         locationsPage:SetAllPoints(panel)
         locationsPage:Hide()
 
+        local guidePage = CreateFrame("Frame", nil, panel)
+        guidePage:SetAllPoints(panel)
+        guidePage:Hide()
+
         local settingsTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
         settingsTab:SetSize(86, 22)
-        settingsTab:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -270, -10)
+        settingsTab:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -366, -10)
         settingsTab:SetText("Settings")
 
         local statisticsTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
@@ -73,6 +78,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         locationsTab:SetSize(86, 22)
         locationsTab:SetPoint("LEFT", statisticsTab, "RIGHT", 4, 0)
         locationsTab:SetText("Locations")
+
+        local guideTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        guideTab:SetSize(86, 22)
+        guideTab:SetPoint("LEFT", locationsTab, "RIGHT", 4, 0)
+        guideTab:SetText("Guide")
 
         local title = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         title:SetPoint("TOPLEFT", 16, -16)
@@ -618,22 +628,94 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
 
+        local guideTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        guideTitle:SetPoint("TOPLEFT", 16, -16)
+        guideTitle:SetText("WoW Forever Fishing Guide")
+
+        local guideSkillText = guidePage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        guideSkillText:SetPoint("TOPLEFT", guideTitle, "BOTTOMLEFT", 0, -8)
+        guideSkillText:SetWidth(550)
+        guideSkillText:SetJustifyH("LEFT")
+
+        local trainingTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        trainingTitle:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 0, -18)
+        trainingTitle:SetTextColor(1, 0.82, 0)
+        trainingTitle:SetText("Training and Leveling")
+
+        local trainingText = guidePage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        trainingText:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -6)
+        trainingText:SetWidth(265)
+        trainingText:SetJustifyH("LEFT")
+        trainingText:SetWordWrap(true)
+
+        local campTitle = guidePage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        campTitle:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 285, -18)
+        campTitle:SetTextColor(1, 0.82, 0)
+        campTitle:SetText("Lures and Campsite Crafts")
+
+        local campText = guidePage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        campText:SetPoint("TOPLEFT", campTitle, "BOTTOMLEFT", 0, -6)
+        campText:SetWidth(265)
+        campText:SetJustifyH("LEFT")
+        campText:SetWordWrap(true)
+
+        local guideSource = guidePage:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        guideSource:SetPoint("BOTTOMLEFT", guidePage, "BOTTOMLEFT", 16, 18)
+        guideSource:SetWidth(550)
+        guideSource:SetJustifyH("LEFT")
+        guideSource:SetText("Source: Wowhead Forever Fishing and Camping guides, Patch 1.60.1. Forever is in beta; routes and data may change.")
+
+        local function RefreshForeverGuide()
+            local skill = GetFishingSkill()
+            if skill then
+                guideSkillText:SetText(string.format("Your Fishing skill: %d", skill))
+            else
+                guideSkillText:SetText("Your Fishing skill is unavailable.")
+            end
+
+            trainingText:SetText(table.concat({
+                "1-75 Apprentice: Fishing trainer. Start in any starter zone; skill 25 reaches a 100% catch rate there.",
+                "75-150 Journeyman: Fishing trainer. Capital cities reach 100% catch rate at skill 75.",
+                "150-225 Expert: buy The Bass and You from Old Man Heming in Booty Bay for 1 gold. Dustwallow Marsh or Stranglethorn Vale need 225 effective skill for a 100% catch rate.",
+                "225-300 Artisan: Nat Pagle quest at character level 35 and Fishing 225. The guide has no complete 225-300 route yet.",
+            }, "\n\n"))
+
+            campText:SetText(table.concat({
+                "Shiny Bauble +25 (skill 1); use below 25 while fishing starter zones.",
+                "Nightcrawlers or Aquadynamic Fish Lens +50 (skill 50).",
+                "Bright Baubles or Flesh Eating Worm +75 (skill 100); Fish Attractor +100 (skill 100).",
+                "Fish Bowl: skill 20, trainer; campsite grants 8% increased stats.",
+                "Fishing Rack: skill 140, blueprint; campsite supports uncommon fish and Fishing lures for 1 hour.",
+                "Fishing Hut: skill 300, blueprint; campsite supports rare fish and Fishing lures for 1 hour.",
+            }, "\n\n"))
+        end
+
         settingsTab:SetScript("OnClick", function()
             statisticsPage:Hide()
             locationsPage:Hide()
+            guidePage:Hide()
             settingsPage:Show()
         end)
         statisticsTab:SetScript("OnClick", function()
             settingsPage:Hide()
             locationsPage:Hide()
+            guidePage:Hide()
             RefreshStatisticsPage()
             statisticsPage:Show()
         end)
         locationsTab:SetScript("OnClick", function()
             settingsPage:Hide()
             statisticsPage:Hide()
+            guidePage:Hide()
             RefreshLocationsPage()
             locationsPage:Show()
+        end)
+        guideTab:SetScript("OnClick", function()
+            settingsPage:Hide()
+            statisticsPage:Hide()
+            locationsPage:Hide()
+            RefreshForeverGuide()
+            guidePage:Show()
         end)
 
         -- Register with the options UI --------------------------------------
@@ -661,12 +743,16 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             settingsPage:Hide()
             statisticsPage:Hide()
             locationsPage:Hide()
+            guidePage:Hide()
             if page == "stats" then
                 RefreshStatisticsPage()
                 statisticsPage:Show()
             elseif page == "atlas" then
                 RefreshLocationsPage()
                 locationsPage:Show()
+            elseif page == "guide" then
+                RefreshForeverGuide()
+                guidePage:Show()
             else
                 settingsPage:Show()
             end
@@ -682,6 +768,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 ShowOptionsPage("stats")
             elseif command == "atlas" or command == "locations" then
                 ShowOptionsPage("atlas")
+            elseif command == "guide" then
+                ShowOptionsPage("guide")
+                            print("EasyFishing commands: /ef [menu|stats|atlas|guide|watch|equip|restore]")
             elseif command == "watch" then
                 EasyFishingDB.showFishWatcher = not EasyFishingDB.showFishWatcher
                 EF.UpdateFishWatcher()

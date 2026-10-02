@@ -26,6 +26,9 @@ The optional watcher shows fishing time, casts, skill-ups, **items this session*
 ### 🗺️ Fish Atlas
 The Locations tab learns fish species by zone, approximate subzone, map coordinates, and broad server-time buckets from this character's confirmed catches. Click a recorded spot to set a world-map waypoint. This is a personal observed-catch database, not a prefilled habitat list or a verified map of fishing-pool boundaries.
 
+### 📖 Forever Fishing Guide
+The Guide tab shows your current Fishing skill alongside documented Forever training ranks, leveling areas, lure requirements, and campsite fishing crafts. The 225-300 leveling route is marked as undocumented in the source guide.
+
 ### 🎒 Fishing Outfit
 Choose a saved Equipment Manager set for fishing, equip it, then restore the previous saved set. Outfit switching is manual and unavailable in combat. The current gear must match a saved set so EasyFishing can restore it safely.
 
@@ -63,6 +66,7 @@ Everything is configurable from **Interface → AddOns → EasyFishing: Forever*
 | `/ef` or `/easyfishing` | Open Settings |
 | `/ef stats` | Open Statistics |
 | `/ef atlas` or `/ef locations` | Open the Fish Atlas |
+| `/ef guide` | Open the Forever Fishing Guide |
 | `/ef watch` | Toggle the Fish Watcher |
 | `/ef equip` | Equip the selected fishing outfit |
 | `/ef restore` | Restore the previous saved outfit |
