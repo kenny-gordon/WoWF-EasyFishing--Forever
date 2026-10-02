@@ -1,8 +1,9 @@
 local MIN_DOUBLE_CLICK = 0.05
 local MAX_DOUBLE_CLICK = 0.4
 local lastClickTime    = 0
-local ignoreLureUntil  = 0
+local lureBarHiddenUntil = 0
 local pendingClearTimer = nil
+local lureBarIdleTimer = nil
 
 -- ---------------------------------------------------------------------------
 -- Saved variables
@@ -14,6 +15,8 @@ local DB_DEFAULTS = {
     enableSound       = true,
     doubleClickDelay  = 0.4,
     doubleClickButton = "RightButton", -- see BUTTON_OPTIONS below
+    lureBarX          = 0,
+    lureBarY          = -300,
 }
 
 -- All mouse buttons we can bind to. `binding` is the WoW key name used by
@@ -101,8 +104,43 @@ end
 local lureMenu = CreateFrame("Frame", "EasyFishingLureMenu", UIParent, "BackdropTemplate")
 lureMenu:SetFrameStrata("DIALOG")
 lureMenu:SetClampedToScreen(true)
+lureMenu:SetMovable(true)
+lureMenu:EnableMouse(true)
+lureMenu:RegisterForDrag("LeftButton")
 lureMenu:Hide()
 tinsert(UISpecialFrames, "EasyFishingLureMenu")
+
+local function HideLureBar()
+    if lureBarIdleTimer then
+        lureBarIdleTimer:Cancel()
+        lureBarIdleTimer = nil
+    end
+    lureMenu:Hide()
+end
+
+lureMenu:SetScript("OnDragStart", function(self)
+    if not InCombatLockdown() then
+        self:StartMoving()
+    end
+end)
+lureMenu:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    if not EasyFishingDB then return end
+
+    local centerX, centerY = self:GetCenter()
+    local parentX, parentY = UIParent:GetCenter()
+    EasyFishingDB.lureBarX = centerX - parentX
+    EasyFishingDB.lureBarY = centerY - parentY
+    self:ClearAllPoints()
+    self:SetPoint("CENTER", UIParent, "CENTER", EasyFishingDB.lureBarX, EasyFishingDB.lureBarY)
+end)
+lureMenu:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP", 0, 5)
+    GameTooltip:SetText("Lure Bar")
+    GameTooltip:AddLine("Drag to move", 1, 1, 1)
+    GameTooltip:Show()
+end)
+lureMenu:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 if lureMenu.SetBackdrop then
     lureMenu:SetBackdrop({
@@ -117,19 +155,16 @@ end
 
 local lureButtons = {}
 
-local lureMenuCloseBtn = CreateFrame("Button", nil, lureMenu)
+local lureMenuCloseBtn = CreateFrame("Button", nil, lureMenu, "UIPanelCloseButton")
 lureMenuCloseBtn:SetSize(20, 20)
-lureMenuCloseBtn:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-lureMenuCloseBtn:SetPushedTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Down")
-lureMenuCloseBtn:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight")
 lureMenuCloseBtn:SetScript("OnClick", function()
-    ignoreLureUntil = GetTime() + 300
-    lureMenu:Hide()
+    lureBarHiddenUntil = GetTime() + 300
+    HideLureBar()
 end)
 lureMenuCloseBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -5)
-    GameTooltip:SetText("Ignore Lures")
-    GameTooltip:AddLine("Fish without lures for the next 5 minutes.", 1, 1, 1, true)
+    GameTooltip:SetText("Hide Lure Bar")
+    GameTooltip:AddLine("Hide the bar for the next 5 minutes.", 1, 1, 1, true)
     GameTooltip:Show()
 end)
 lureMenuCloseBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -140,17 +175,17 @@ local function UpdateLureMenu(availableLures)
     end
 
     if #availableLures == 0 then
-        lureMenu:Hide()
+        HideLureBar()
         return false
     end
 
     local btnSize = 28
     local padding = 5
-    local width   = (#availableLures * btnSize) + ((#availableLures + 1) * padding)
+    local width   = (#availableLures * btnSize) + ((#availableLures + 2) * padding) + lureMenuCloseBtn:GetWidth()
     lureMenu:SetSize(width, btnSize + 2 * padding)
 
     lureMenuCloseBtn:ClearAllPoints()
-    lureMenuCloseBtn:SetPoint("TOPRIGHT", lureMenu, "TOPRIGHT", -3, -3)
+    lureMenuCloseBtn:SetPoint("RIGHT", lureMenu, "RIGHT", -padding, 0)
 
     local spellName = GetFishingSpellName()
 
@@ -199,17 +234,14 @@ local function UpdateLureMenu(availableLures)
 
         btn.itemID = lure.id
         btn:ClearAllPoints()
-        btn:SetPoint("LEFT", lureMenu, "LEFT",
-            padding + (i - 1) * (btnSize + padding), 0)
+        btn:SetPoint("BOTTOMLEFT", lureMenu, "BOTTOMLEFT",
+            padding + (i - 1) * (btnSize + padding), padding)
 
         btn.icon:SetTexture(GetIcon(lure.id))
         btn:SetAttribute("type", "macro")
         -- Apply the lure, then actually cast Fishing (not just "use main hand")
         btn:SetAttribute("macrotext",
             "/use item:" .. lure.id .. "\n/cast " .. spellName)
-        btn:SetScript("PostClick", function()
-            lureMenu:Hide()
-        end)
         btn.Count:SetText(lure.count > 1 and lure.count or "")
         btn:Show()
     end
@@ -291,6 +323,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         MAX_DOUBLE_CLICK = EasyFishingDB.doubleClickDelay
+        if EasyFishingDB.lureBarX == 0 and EasyFishingDB.lureBarY == -180 then
+            EasyFishingDB.lureBarY = DB_DEFAULTS.lureBarY
+        end
+        lureMenu:ClearAllPoints()
+        lureMenu:SetPoint("CENTER", UIParent, "CENTER", EasyFishingDB.lureBarX, EasyFishingDB.lureBarY)
 
         -- ------------------------------------------------------------------
         -- Options panel
@@ -337,6 +374,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     if not me:GetChecked() then
                         ClearBinding()
                     end
+                elseif dbKey == "enableLureMenu" and not me:GetChecked() then
+                    HideLureBar()
                 end
             end)
             return cb
@@ -457,7 +496,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         clickFrame:SetScript("OnEvent", function(_, evt, buttonName)
             if evt == "PLAYER_REGEN_DISABLED" then
                 ClearBinding()
-                if lureMenu:IsShown() then lureMenu:Hide() end
+                HideLureBar()
                 return
             end
 
@@ -529,6 +568,10 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
         local channelName  = UnitChannelInfo("player")
         if channelName ~= expectedName then return end
 
+        if lureBarIdleTimer then
+            lureBarIdleTimer:Cancel()
+            lureBarIdleTimer = nil
+        end
         isFishing = true
         EasyFishingDB = EasyFishingDB or {}
 
@@ -548,23 +591,13 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
             end
         end
 
-        -- Lure menu
-        if EasyFishingDB.enableLureMenu and not InCombatLockdown() then
-            local hasLure = GetWeaponEnchantInfo()
-            local nowTime = GetTime()
-            if hasLure then
-                ignoreLureUntil = 0
-            end
-            if not hasLure and nowTime > ignoreLureUntil then
-                local lures = GetAvailableLures()
-                if #lures > 0 and UpdateLureMenu(lures) then
-                    local x, y = GetCursorPosition()
-                    local scale = UIParent:GetEffectiveScale()
-                    lureMenu:ClearAllPoints()
-                    lureMenu:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT",
-                        (x / scale) + 40, (y / scale) - 20)
-                    lureMenu:Show()
-                end
+        -- Keep the lure bar available across casts and bobber waits.
+        if not EasyFishingDB.enableLureMenu or InCombatLockdown() then
+            HideLureBar()
+        elseif GetTime() >= lureBarHiddenUntil then
+            local lures = GetAvailableLures()
+            if UpdateLureMenu(lures) then
+                lureMenu:Show()
             end
         end
 
@@ -581,6 +614,14 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
         if userBGSetting ~= nil then
             SetCVarBG(userBGSetting)
             userBGSetting = nil
+        end
+        if lureMenu:IsShown() then
+            lureBarIdleTimer = C_Timer.NewTimer(120, function()
+                lureBarIdleTimer = nil
+                if not isFishing then
+                    lureMenu:Hide()
+                end
+            end)
         end
     end
 end)

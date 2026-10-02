@@ -15,13 +15,13 @@ While a fishing pole is equipped, double-click anywhere (configurable) to instan
 - Adjustable double-click window (0.1s – 0.8s)
 - Casts only when standing still, out of combat, no mouseover target, and no unit selected
 
-### 🪝 Smart Lure Menu
-After each cast, if no lure is active, a compact quick-select menu appears near your cursor showing every lure in your bags.
+### 🪝 Smart Lure Bar
+A compact, draggable lure bar appears when you fish and shows the lures in your bags. It stays available across casts and bobber waits, then hides after two minutes without another cast.
 
 - One click applies the lure **and** re-casts Fishing
-- Item count displayed on each button
-- Close button (`×`) suppresses the menu for 5 minutes
-- Menu re-appears automatically if you start a new fishing session
+- Item counts refresh after each cast
+- Drag the bar to reposition it; its position is saved
+- Close button (`×`) hides the bar for 5 minutes
 
 ### 🔊 Sound Automation
 Tired of alt-tabbing to silence or unmute WoW? EasyFishing automatically:
