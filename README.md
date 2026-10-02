@@ -49,4 +49,5 @@ Everything is configurable from **Interface → AddOns → EasyFishing: Forever*
 
 ### Manual
 1. Download the latest release
-2. Extract the `EasyFishing` folder into:
+2. Extract the `EasyFishing` folder into `<WoW installation>/Interface/AddOns/`
+3. Launch WoW and enable **EasyFishing: Forever** in the AddOns list.

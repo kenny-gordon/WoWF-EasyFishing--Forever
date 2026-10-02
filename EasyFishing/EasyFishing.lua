@@ -486,8 +486,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         clickFrame:RegisterEvent("GLOBAL_MOUSE_DOWN")
         clickFrame:RegisterEvent("GLOBAL_MOUSE_UP")
         clickFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+        clickFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
         clickFrame:SetScript("OnEvent", function(_, evt, buttonName)
-            if evt == "PLAYER_REGEN_DISABLED" then
+            if evt == "PLAYER_REGEN_DISABLED" or evt == "PLAYER_REGEN_ENABLED" then
                 ClearBinding()
                 return
             end
