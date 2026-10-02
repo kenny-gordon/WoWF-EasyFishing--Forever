@@ -5,6 +5,8 @@
 ## Version: 0.1.0
 ## IconTexture: Interface\AddOns\EasyFishing\EasyFishing.tga
 ## SavedVariables: EasyFishingDB
+## SavedVariablesPerCharacter: EasyFishingCharDB
+## OptionalDeps: TomTom
 
 Data.lua
 Core.lua

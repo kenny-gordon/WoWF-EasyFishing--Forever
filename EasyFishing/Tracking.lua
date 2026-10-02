@@ -103,14 +103,14 @@ fishWatcher:SetScript("OnDragStart", function(self)
 end)
 fishWatcher:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
-    if not EasyFishingDB then return end
+    local characterDB = EF.GetCharacterDB()
 
     local centerX, centerY = self:GetCenter()
     local parentX, parentY = UIParent:GetCenter()
-    EasyFishingDB.fishWatcherX = centerX - parentX
-    EasyFishingDB.fishWatcherY = centerY - parentY
+    characterDB.fishWatcherX = centerX - parentX
+    characterDB.fishWatcherY = centerY - parentY
     self:ClearAllPoints()
-    self:SetPoint("CENTER", UIParent, "CENTER", EasyFishingDB.fishWatcherX, EasyFishingDB.fishWatcherY)
+    self:SetPoint("CENTER", UIParent, "CENTER", characterDB.fishWatcherX, characterDB.fishWatcherY)
 end)
 fishWatcher:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP", 0, 5)
@@ -121,15 +121,18 @@ end)
 fishWatcher:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 local function EnsureFishingStats()
-    if type(EasyFishingDB.fishingStats) ~= "table" then
-        EasyFishingDB.fishingStats = {}
+    local characterDB = EF.GetCharacterDB()
+    if type(characterDB.fishingStats) ~= "table" then
+        characterDB.fishingStats = {}
     end
-    local stats = EasyFishingDB.fishingStats
+    local stats = characterDB.fishingStats
     stats.totalItems = tonumber(stats.totalItems) or 0
     stats.totalSessions = tonumber(stats.totalSessions) or 0
     stats.totalCasts = tonumber(stats.totalCasts) or 0
     stats.totalFishingSeconds = tonumber(stats.totalFishingSeconds) or 0
     stats.totalSkillUps = tonumber(stats.totalSkillUps) or 0
+    stats.rateTrackedCasts = tonumber(stats.rateTrackedCasts) or 0
+    stats.successfulCasts = tonumber(stats.successfulCasts) or 0
     if type(stats.itemsByID) ~= "table" then
         stats.itemsByID = {}
     end
@@ -150,6 +153,8 @@ local function EnsureZoneFishingStats(stats, zoneName)
     zoneStats.casts = tonumber(zoneStats.casts) or 0
     zoneStats.fishingSeconds = tonumber(zoneStats.fishingSeconds) or 0
     zoneStats.skillUps = tonumber(zoneStats.skillUps) or 0
+    zoneStats.rateTrackedCasts = tonumber(zoneStats.rateTrackedCasts) or 0
+    zoneStats.successfulCasts = tonumber(zoneStats.successfulCasts) or 0
     if type(zoneStats.itemsByID) ~= "table" then
         zoneStats.itemsByID = {}
     end
@@ -347,12 +352,14 @@ local function StartFishingSession()
         }
     end
     local castTime = GetTime()
-    local sessionZoneStats = EnsureZoneFishingStats(
-        EnsureFishingStats(), fishingSession.zone)
+    local stats = EnsureFishingStats()
+    local sessionZoneStats = EnsureZoneFishingStats(stats, fishingSession.zone)
     fishingSession.casts = fishingSession.casts + 1
     fishingSession.lastActivityAt = castTime
     sessionZoneStats.casts = sessionZoneStats.casts + 1
-    EnsureFishingStats().totalCasts = EnsureFishingStats().totalCasts + 1
+    stats.totalCasts = stats.totalCasts + 1
+    stats.rateTrackedCasts = stats.rateTrackedCasts + 1
+    sessionZoneStats.rateTrackedCasts = sessionZoneStats.rateTrackedCasts + 1
     UpdateFishWatcher()
 end
 
@@ -395,10 +402,12 @@ local function RecordFishingLoot()
     local zoneName = GetRealZoneText() or "Unknown zone"
     local zoneStats = EnsureZoneFishingStats(stats, zoneName)
 
+    local successfulCast = false
     for lootSlot = 1, GetNumLootItems() do
         local itemLink = GetLootSlotLink(lootSlot)
         local itemID = itemLink and tonumber(itemLink:match("|Hitem:(%d+)"))
         if itemID then
+            successfulCast = true
             local _, itemName, quantity = GetLootSlotInfo(lootSlot)
             itemName = itemName or GetItemInfo(itemID) or ("Item " .. itemID)
             quantity = tonumber(quantity) or 1
@@ -438,6 +447,11 @@ local function RecordFishingLoot()
             stats.lastCatchItemLink = itemLink
             stats.lastCatchName = itemName
         end
+    end
+
+    if successfulCast then
+        stats.successfulCasts = stats.successfulCasts + 1
+        zoneStats.successfulCasts = zoneStats.successfulCasts + 1
     end
 
     UpdateFishWatcher()

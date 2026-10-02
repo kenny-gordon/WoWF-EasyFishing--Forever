@@ -12,15 +12,44 @@ local clearBindingOnMouseUp = false
 local DB_DEFAULTS = {
     enableDoubleClick = true,
     enableAutoLure = true,
+    preferStrongestLure = false,
     enableSound = true,
     disableClickToMoveWhileFishing = false,
     showFishWatcher = true,
     doubleClickDelay = 0.4,
     doubleClickButton = "LeftButton",
     castClickMode = "DoubleClick",
-    fishWatcherX = 0,
-    fishWatcherY = 160,
 }
+
+local CHARACTER_DB_MIGRATION_KEYS = {
+    "fishWatcherX",
+    "fishWatcherY",
+    "fishingStats",
+    "fishingOutfitSetID",
+    "previousFishingSetID",
+    "lastFishingSpot",
+}
+
+local function GetCharacterDB()
+    if type(EasyFishingCharDB) ~= "table" then
+        EasyFishingCharDB = {}
+    end
+    return EasyFishingCharDB
+end
+
+local function InitializeCharacterDB()
+    EasyFishingDB = EasyFishingDB or {}
+    local characterDB = GetCharacterDB()
+    for _, key in ipairs(CHARACTER_DB_MIGRATION_KEYS) do
+        if characterDB[key] == nil and EasyFishingDB[key] ~= nil then
+            characterDB[key] = EasyFishingDB[key]
+        end
+        EasyFishingDB[key] = nil
+    end
+    if characterDB.fishWatcherX == nil then characterDB.fishWatcherX = 0 end
+    if characterDB.fishWatcherY == nil then characterDB.fishWatcherY = 160 end
+    return characterDB
+end
 
 local BUTTON_OPTIONS = {
     { key = "LeftButton", binding = "BUTTON1", label = "Left Mouse" },
@@ -118,9 +147,15 @@ local function GetAvailableLures()
     for _, lure in ipairs(DATA.LURES) do
         local count = GetItemCountWrapper(lure.id)
         if count > 0 and skill >= lure.minimumSkill then
-            table.insert(available, { id = lure.id, count = count })
+            table.insert(available, { id = lure.id, count = count, bonus = lure.bonus or 0 })
         end
     end
+    table.sort(available, function(first, second)
+        if first.bonus == second.bonus then
+            return first.id < second.id
+        end
+        return first.bonus < second.bonus
+    end)
     return available
 end
 
@@ -159,7 +194,7 @@ local function UseFishingEquipmentSet(setID)
 end
 
 local function EquipFishingOutfit()
-    local setID = tonumber(EasyFishingDB and EasyFishingDB.fishingOutfitSetID)
+    local setID = tonumber(GetCharacterDB().fishingOutfitSetID)
     if not setID then
         print("EasyFishing: select a fishing equipment set first.")
         return
@@ -173,27 +208,28 @@ local function EquipFishingOutfit()
     end
 
     if UseFishingEquipmentSet(setID) then
-        EasyFishingDB.previousFishingSetID = currentSetID
+        GetCharacterDB().previousFishingSetID = currentSetID
         local setName = C_EquipmentSet.GetEquipmentSetInfo(setID)
         print("EasyFishing: equipped " .. (setName or "fishing gear") .. ".")
     end
 end
 
 local function RestorePreviousEquipmentSet()
-    local setID = tonumber(EasyFishingDB and EasyFishingDB.previousFishingSetID)
+    local characterDB = GetCharacterDB()
+    local setID = tonumber(characterDB.previousFishingSetID)
     if not setID then
         print("EasyFishing: there is no saved equipment set to restore.")
         return
     end
     if UseFishingEquipmentSet(setID) then
-        EasyFishingDB.previousFishingSetID = nil
+        characterDB.previousFishingSetID = nil
         local setName = C_EquipmentSet.GetEquipmentSetInfo(setID)
         print("EasyFishing: restored " .. (setName or "your previous gear") .. ".")
     end
 end
 
 local function ToggleFishingOutfit()
-    local fishingSetID = tonumber(EasyFishingDB and EasyFishingDB.fishingOutfitSetID)
+    local fishingSetID = tonumber(GetCharacterDB().fishingOutfitSetID)
     if not fishingSetID then
         print("EasyFishing: select a fishing equipment set first.")
         return
@@ -214,7 +250,9 @@ local function GetAutoLureID()
     if hasMainHandEnchant then return nil end
 
     local availableLures = GetAvailableLures()
-    return availableLures[1] and availableLures[1].id
+    local preferStrongest = EasyFishingDB and EasyFishingDB.preferStrongestLure
+    local lure = preferStrongest and availableLures[#availableLures] or availableLures[1]
+    return lure and lure.id
 end
 
 -- ---------------------------------------------------------------------------
@@ -350,6 +388,8 @@ end
 
 EF.MIN_DOUBLE_CLICK = MIN_DOUBLE_CLICK
 EF.DB_DEFAULTS = DB_DEFAULTS
+EF.GetCharacterDB = GetCharacterDB
+EF.InitializeCharacterDB = InitializeCharacterDB
 EF.BUTTON_OPTIONS = BUTTON_OPTIONS
 EF.CAST_MODE_OPTIONS = CAST_MODE_OPTIONS
 EF.GetButtonOption = GetButtonOption

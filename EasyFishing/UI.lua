@@ -71,8 +71,36 @@ local function ShareLastFish()
     OpenChatWithLinks(stats.lastCatchItemLink)
 end
 
+local activeTomTomWaypointID
+local function SetTomTomWaypoint(spot, label)
+    local tomTom = rawget(_G, "TomTom")
+    if type(tomTom) ~= "table" or type(tomTom.AddWaypoint) ~= "function" then
+        return false
+    end
+
+    if activeTomTomWaypointID and type(tomTom.RemoveWaypoint) == "function" then
+        pcall(tomTom.RemoveWaypoint, tomTom, activeTomTomWaypointID)
+    end
+    local ok, waypointID = pcall(tomTom.AddWaypoint, tomTom,
+        spot.mapID, spot.x, spot.y, {
+            title = label,
+            from = "EasyFishing",
+            persistent = false,
+            minimap = true,
+            world = true,
+        })
+    if not ok or not waypointID then
+        return false
+    end
+    activeTomTomWaypointID = waypointID
+    if type(tomTom.SetCrazyArrow) == "function" then
+        pcall(tomTom.SetCrazyArrow, tomTom, waypointID, 15, label)
+    end
+    return true
+end
+
 local function ShareFishingLocation()
-    local spot = EasyFishingDB.lastFishingSpot
+    local spot = EF.GetCharacterDB().lastFishingSpot
     if spot and C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
         and UiMapPoint and UiMapPoint.CreateFromCoordinates
         and C_Map.CanSetUserWaypointOnMap(spot.mapID) then
@@ -84,6 +112,7 @@ local function ShareFishingLocation()
             end
         end
     end
+    if spot then SetTomTomWaypoint(spot, spot.label or "Fishing location") end
 
     local hyperlink = C_Map and C_Map.GetUserWaypointHyperlink and C_Map.GetUserWaypointHyperlink()
     if not hyperlink or hyperlink == "" then
@@ -95,7 +124,7 @@ local function ShareFishingLocation()
 end
 
 local function ShareFishingOutfit()
-    local setID = tonumber(EasyFishingDB.fishingOutfitSetID)
+    local setID = tonumber(EF.GetCharacterDB().fishingOutfitSetID)
     if not setID or not C_EquipmentSet or not C_EquipmentSet.GetItemIDs then
         print("EasyFishing: select an available fishing outfit first.")
         return
@@ -143,11 +172,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 EasyFishingDB[k] = v
             end
         end
+        EF.InitializeCharacterDB()
+        local characterDB = EF.GetCharacterDB()
         EF.SetDoubleClickDelay(EasyFishingDB.doubleClickDelay)
         EF.EnsureFishingStats()
         EF.FishWatcher:ClearAllPoints()
         EF.FishWatcher:SetPoint("CENTER", UIParent, "CENTER",
-            EasyFishingDB.fishWatcherX, EasyFishingDB.fishWatcherY)
+            characterDB.fishWatcherX, characterDB.fishWatcherY)
         EF.UpdateAutoInteractSetting()
 
         -- ------------------------------------------------------------------
@@ -430,10 +461,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local secLure = SectionHeader("Lures", slider, -24)
         local cbAutoLure = MakeCheckbox(
             "Apply Lure Automatically",
-            "If your pole has no lure, your first click applies the weakest lure your Fishing skill allows. Click again with the selected pattern to cast.",
+            "If your pole has no lure, your first click applies an eligible lure. Choose whether to conserve stock or use your strongest available lure below.",
             secLure, -4, "enableAutoLure")
 
-        local secTracking = SectionHeader("Tracking", cbAutoLure, -10)
+        local cbStrongestLure = MakeCheckbox(
+            "Use Strongest Available Lure",
+            "Prefer the highest-bonus eligible lure instead of conserving stronger lures.",
+            cbAutoLure, -4, "preferStrongestLure")
+
+        local secTracking = SectionHeader("Tracking", cbStrongestLure, -10)
         MakeCheckbox(
             "Show Fish Watcher",
             "Show the Watcher during an active fishing session. It hides when you move away or after two minutes without a cast.",
@@ -478,21 +514,21 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 if name then
                     local info = UIDropDownMenu_CreateInfo()
                     info.text = name
-                    info.checked = tonumber(EasyFishingDB.fishingOutfitSetID) == setID
+                    info.checked = tonumber(characterDB.fishingOutfitSetID) == setID
                     info.func = function()
-                        EasyFishingDB.fishingOutfitSetID = setID
+                        characterDB.fishingOutfitSetID = setID
                         UIDropDownMenu_SetText(outfitDropdown, name)
                         CloseDropDownMenus()
                     end
                     UIDropDownMenu_AddButton(info)
-                    if tonumber(EasyFishingDB.fishingOutfitSetID) == setID then
+                    if tonumber(characterDB.fishingOutfitSetID) == setID then
                         selectedOutfitName = name
                     end
                 end
             end
         end)
         for _, setID in ipairs(GetEquipmentSetIDs()) do
-            if tonumber(EasyFishingDB.fishingOutfitSetID) == setID then
+            if tonumber(characterDB.fishingOutfitSetID) == setID then
                 selectedOutfitName = C_EquipmentSet.GetEquipmentSetInfo(setID)
                 break
             end
@@ -691,10 +727,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             metricValues[2]:SetText(tostring(stats.totalCasts))
             metricValues[3]:SetText(EF.FormatFishingTime(stats.totalFishingSeconds))
             metricValues[4]:SetText(tostring(stats.totalSkillUps))
+            local catchRate = stats.rateTrackedCasts > 0
+                and string.format("%.1f%% catch rate", math.min(100,
+                    stats.successfulCasts * 100 / stats.rateTrackedCasts))
+                or "catch rate collecting"
             statisticsSummary:SetText(string.format(
-                "Lifetime: %d sessions  |  %d %s  |  %.1f items per hour",
+                "Lifetime: %d sessions  |  %d %s  |  %.1f items per hour  |  %s",
                 stats.totalSessions, zoneCount, zoneCount == 1 and "zone" or "zones",
-                stats.totalFishingSeconds > 0 and stats.totalItems * 3600 / stats.totalFishingSeconds or 0))
+                stats.totalFishingSeconds > 0 and stats.totalItems * 3600 / stats.totalFishingSeconds or 0,
+                catchRate))
             local zoneEntries, moreZones = BuildStatsEntries(stats.zones, 5)
             RenderStatisticsRows(zoneStatsList, zoneStatsRows, zoneStatsEmpty, zoneStatsMore,
                 zoneEntries, moreZones, zoneEntries[1] and zoneEntries[1].count or 0,
@@ -703,9 +744,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end,
                 function(entry)
                     local zone = entry.data
-                    return string.format("%d sessions  |  %d casts  |  %s",
+                    local trackedCasts = tonumber(zone.rateTrackedCasts) or 0
+                    local zoneCatchRate = trackedCasts > 0
+                        and string.format("  |  %.1f%% caught", math.min(100,
+                            (tonumber(zone.successfulCasts) or 0) * 100 / trackedCasts))
+                        or ""
+                    return string.format("%d sessions  |  %d casts  |  %s%s",
                         tonumber(zone.sessions) or 0, tonumber(zone.casts) or 0,
-                        EF.FormatFishingTime(tonumber(zone.fishingSeconds) or 0))
+                        EF.FormatFishingTime(tonumber(zone.fishingSeconds) or 0), zoneCatchRate)
                 end)
 
             local itemEntries, moreItems = BuildStatsEntries(stats.itemsByID, 5)
@@ -724,7 +770,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local locationsDescription = locationsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         locationsDescription:SetPoint("TOPLEFT", locationsDivider, "BOTTOMLEFT", 0, -14)
-        locationsDescription:SetWidth(400)
+        locationsDescription:SetWidth(210)
         locationsDescription:SetJustifyH("LEFT")
         locationsDescription:SetWordWrap(true)
         locationsDescription:SetText("Your recorded fishing locations, grouped by area. Expand an area to see each location, then click one to set a map waypoint.")
@@ -743,10 +789,425 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local locationsContent = CreateFrame("Frame", nil, locationsScroll)
         locationsContent:SetSize(590, 1)
         locationsScroll:SetScrollChild(locationsContent)
+        local RefreshLocationsPage
+        local OpenLocationTransfer
+
+        local function EncodeTransferField(value)
+            return tostring(value or "")
+                :gsub("%%", "%%25")
+                :gsub("\t", "%%09")
+                :gsub("\r", "%%0D")
+                :gsub("\n", "%%0A")
+        end
+
+        local function DecodeTransferField(value)
+            return value:gsub("%%(%x%x)", function(hex)
+                return string.char(tonumber(hex, 16))
+            end)
+        end
+
+        local function SplitTransferFields(line)
+            local fields = {}
+            local startIndex = 1
+            while true do
+                local separator = line:find("\t", startIndex, true)
+                if not separator then
+                    table.insert(fields, line:sub(startIndex))
+                    break
+                end
+                table.insert(fields, line:sub(startIndex, separator - 1))
+                startIndex = separator + 1
+            end
+            return fields
+        end
+
+        local function ExportFishingLocations()
+            local lines = { "EFS2" }
+            local recordCount = 0
+            local stats = EF.EnsureFishingStats()
+            local zoneNames = {}
+            for zoneName in pairs(stats.zones) do
+                table.insert(zoneNames, zoneName)
+            end
+            table.sort(zoneNames)
+
+            for _, zoneName in ipairs(zoneNames) do
+                local zone = stats.zones[zoneName]
+                local spotKeys = {}
+                for spotKey in pairs(zone.spots or {}) do
+                    table.insert(spotKeys, spotKey)
+                end
+                table.sort(spotKeys)
+                for _, spotKey in ipairs(spotKeys) do
+                    local spot = zone.spots[spotKey]
+                    if type(spot) == "table" and tonumber(spot.mapID)
+                        and tonumber(spot.x) and tonumber(spot.y) then
+                        recordCount = recordCount + 1
+                        if recordCount > 2000 then
+                            return nil, "Export is limited to 2,000 locations."
+                        end
+                        local itemIDs = {}
+                        for itemID in pairs(spot.itemsByID or {}) do
+                            table.insert(itemIDs, tostring(itemID))
+                        end
+                        table.sort(itemIDs)
+                        local items = {}
+                        for _, itemID in ipairs(itemIDs) do
+                            local item = spot.itemsByID[itemID]
+                            local buckets = item.timeBuckets or {}
+                            table.insert(items, table.concat({
+                                itemID,
+                                math.max(0, math.floor(tonumber(item.count) or 0)),
+                                math.max(0, math.floor(tonumber(buckets[0]) or 0)),
+                                math.max(0, math.floor(tonumber(buckets[1]) or 0)),
+                                math.max(0, math.floor(tonumber(buckets[2]) or 0)),
+                                math.max(0, math.floor(tonumber(buckets[3]) or 0)),
+                            }, ":"))
+                        end
+                        table.insert(lines, table.concat({
+                            EncodeTransferField(zoneName),
+                            tostring(math.floor(tonumber(spot.mapID))),
+                            string.format("%.8f", tonumber(spot.x)),
+                            string.format("%.8f", tonumber(spot.y)),
+                            EncodeTransferField(spot.subzone),
+                            EncodeTransferField(spot.label),
+                            spot.favorite and "1" or "0",
+                            table.concat(items, ","),
+                        }, "\t"))
+                    end
+                end
+            end
+            local exportText = table.concat(lines, "\n")
+            if #exportText > 2000000 then
+                return nil, "Export text is too large to transfer in one copy."
+            end
+            return exportText
+        end
+
+        local function ParseFishingLocationExport(text)
+            if type(text) ~= "string" or #text > 2000000 then
+                return nil, "Export text is invalid or too large."
+            end
+            local imported = {}
+            local lineNumber = 0
+            for line in (text .. "\n"):gmatch("(.-)\n") do
+                line = line:gsub("\r$", "")
+                if line ~= "" then
+                    lineNumber = lineNumber + 1
+                    if lineNumber == 1 then
+                        if line ~= "EFS2" then
+                            return nil, "This is not a supported EasyFishing spots export."
+                        end
+                    else
+                        if lineNumber > 2001 then
+                            return nil, "The export contains too many locations."
+                        end
+                        local fields = SplitTransferFields(line)
+                        if #fields ~= 8 then
+                            return nil, "Invalid location record on line " .. lineNumber .. "."
+                        end
+                        local zoneName = DecodeTransferField(fields[1])
+                        local mapID = tonumber(fields[2])
+                        local x, y = tonumber(fields[3]), tonumber(fields[4])
+                        local subzone = DecodeTransferField(fields[5])
+                        local label = DecodeTransferField(fields[6])
+                        if zoneName == "" or #zoneName > 255 or #subzone > 255
+                            or #label > 48
+                            or not mapID or mapID < 1 or mapID > 50000 or mapID ~= math.floor(mapID)
+                            or not x or not y or x ~= x or y ~= y
+                            or x < 0 or x > 1 or y < 0 or y > 1
+                            or (fields[7] ~= "0" and fields[7] ~= "1") then
+                            return nil, "Invalid location data on line " .. lineNumber .. "."
+                        end
+
+                        local spot = {
+                            mapID = mapID,
+                            x = x,
+                            y = y,
+                            subzone = subzone,
+                            label = label ~= "" and label or nil,
+                            favorite = fields[7] == "1" or nil,
+                            totalItems = 0,
+                            itemsByID = {},
+                        }
+                        if #fields[8] > 100000 then
+                            return nil, "Fish data is too large on line " .. lineNumber .. "."
+                        end
+                        local itemEntryCount = 0
+                        for encodedItem in fields[8]:gmatch("[^,]+") do
+                            itemEntryCount = itemEntryCount + 1
+                            if itemEntryCount > 512 then
+                                return nil, "Too many fish types on line " .. lineNumber .. "."
+                            end
+                            local values = {}
+                            for value in (encodedItem .. ":"):gmatch("(.-):") do
+                                table.insert(values, value)
+                            end
+                            if #values ~= 6 then
+                                return nil, "Invalid fish data on line " .. lineNumber .. "."
+                            end
+                            local itemID = tonumber(values[1])
+                            local count = tonumber(values[2])
+                            if not itemID or itemID < 1 or itemID > 20000000
+                                or itemID ~= math.floor(itemID)
+                                or not count or count < 1 or count > 1000000000
+                                or count ~= math.floor(count) then
+                                return nil, "Invalid fish data on line " .. lineNumber .. "."
+                            end
+                            if spot.itemsByID[tostring(itemID)] then
+                                return nil, "Duplicate fish data on line " .. lineNumber .. "."
+                            end
+                            local timeBuckets = {}
+                            for bucket = 0, 3 do
+                                local bucketCount = tonumber(values[bucket + 3])
+                                if not bucketCount or bucketCount < 0 or bucketCount > 1000000000
+                                    or bucketCount ~= math.floor(bucketCount) then
+                                    return nil, "Invalid time data on line " .. lineNumber .. "."
+                                end
+                                timeBuckets[bucket] = bucketCount
+                            end
+                            spot.itemsByID[tostring(itemID)] = {
+                                name = GetItemInfo(itemID) or ("Item " .. itemID),
+                                count = count,
+                                timeBuckets = timeBuckets,
+                            }
+                            spot.totalItems = spot.totalItems + count
+                        end
+                        if spot.totalItems == 0 then
+                            return nil, "A location has no fish records on line " .. lineNumber .. "."
+                        end
+                        table.insert(imported, { zone = zoneName, spot = spot })
+                    end
+                end
+            end
+            if lineNumber == 0 then
+                return nil, "The export is empty."
+            end
+            return imported
+        end
+
+        local function ImportFishingLocations(text)
+            local imported, errorMessage = ParseFishingLocationExport(text)
+            if not imported then return nil, errorMessage end
+
+            local stats = EF.EnsureFishingStats()
+            local added, merged = 0, 0
+            for _, entry in ipairs(imported) do
+                local zone = EF.EnsureZoneFishingStats(stats, entry.zone)
+                local spot = entry.spot
+                local cellX = math.min(199, math.max(0, math.floor(spot.x * 200)))
+                local cellY = math.min(199, math.max(0, math.floor(spot.y * 200)))
+                local spotKey = string.format("%d:%d:%d", spot.mapID, cellX, cellY)
+                local existing = zone.spots[spotKey]
+                if type(existing) ~= "table" then
+                    zone.spots[spotKey] = spot
+                    added = added + 1
+                else
+                    existing.favorite = existing.favorite or spot.favorite
+                    existing.label = existing.label or spot.label
+                    if not existing.subzone or existing.subzone == "" then
+                        existing.subzone = spot.subzone
+                    end
+                    existing.itemsByID = existing.itemsByID or {}
+                    for itemID, item in pairs(spot.itemsByID) do
+                        local current = existing.itemsByID[itemID]
+                        if type(current) ~= "table" then
+                            existing.itemsByID[itemID] = item
+                        else
+                            current.count = math.max(tonumber(current.count) or 0, item.count)
+                            current.name = current.name or item.name
+                            current.timeBuckets = current.timeBuckets or {}
+                            for bucket = 0, 3 do
+                                current.timeBuckets[bucket] = math.max(
+                                    tonumber(current.timeBuckets[bucket]) or 0,
+                                    item.timeBuckets[bucket])
+                            end
+                        end
+                    end
+                    existing.totalItems = 0
+                    for _, item in pairs(existing.itemsByID) do
+                        existing.totalItems = existing.totalItems + (tonumber(item.count) or 0)
+                    end
+                    merged = merged + 1
+                end
+            end
+            return added, merged
+        end
+
+        local transferFrame = CreateFrame("Frame", "EasyFishingLocationTransfer", UIParent, "BackdropTemplate")
+        transferFrame:SetSize(560, 430)
+        transferFrame:SetPoint("CENTER")
+        transferFrame:SetFrameStrata("DIALOG")
+        transferFrame:SetClampedToScreen(true)
+        transferFrame:EnableMouse(true)
+        transferFrame:SetMovable(true)
+        transferFrame:RegisterForDrag("LeftButton")
+        transferFrame:SetScript("OnDragStart", transferFrame.StartMoving)
+        transferFrame:SetScript("OnDragStop", transferFrame.StopMovingOrSizing)
+        transferFrame:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true,
+            tileSize = 16,
+            edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        })
+        transferFrame:SetBackdropColor(0.02, 0.025, 0.025, 0.96)
+        transferFrame:SetBackdropBorderColor(0.48, 0.38, 0.2, 1)
+        transferFrame:Hide()
+
+        local transferTitle = transferFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        transferTitle:SetPoint("TOPLEFT", transferFrame, "TOPLEFT", 18, -16)
+        transferTitle:SetText("Fishing Location Transfer")
+
+        local transferHelp = transferFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        transferHelp:SetPoint("TOPLEFT", transferTitle, "BOTTOMLEFT", 0, -8)
+        transferHelp:SetWidth(510)
+        transferHelp:SetJustifyH("LEFT")
+        transferHelp:SetText("Export to copy your saved spots. Paste a versioned export here and import it; matching locations merge without double-counting.")
+
+        local transferClose = CreateFrame("Button", nil, transferFrame, "UIPanelCloseButton")
+        transferClose:SetPoint("TOPRIGHT", transferFrame, "TOPRIGHT", -4, -4)
+        transferClose:SetScript("OnClick", function() transferFrame:Hide() end)
+
+        local transferScroll = CreateFrame("ScrollFrame", nil, transferFrame, "UIPanelScrollFrameTemplate")
+        transferScroll:SetPoint("TOPLEFT", transferHelp, "BOTTOMLEFT", 0, -10)
+        transferScroll:SetSize(520, 300)
+        local transferEditBox = CreateFrame("EditBox", nil, transferScroll)
+        transferEditBox:SetMultiLine(true)
+        transferEditBox:SetAutoFocus(false)
+        transferEditBox:SetFontObject(ChatFontNormal)
+        transferEditBox:SetWidth(500)
+        transferEditBox:SetHeight(280)
+        transferEditBox:SetMaxLetters(2000000)
+        transferEditBox:SetTextInsets(8, 8, 8, 8)
+        transferEditBox:SetScript("OnTextChanged", function(self)
+            local visualLines = 0
+            for line in (self:GetText() .. "\n"):gmatch("(.-)\n") do
+                visualLines = visualLines + math.max(1, math.ceil(#line / 68))
+            end
+            self:SetHeight(math.max(280, visualLines * 15 + 16))
+            transferScroll:UpdateScrollChildRect()
+        end)
+        transferEditBox:SetScript("OnEscapePressed", function() transferFrame:Hide() end)
+        transferScroll:SetScrollChild(transferEditBox)
+
+        local transferStatus = transferFrame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        transferStatus:SetPoint("BOTTOMLEFT", transferFrame, "BOTTOMLEFT", 18, 19)
+        transferStatus:SetWidth(310)
+        transferStatus:SetJustifyH("LEFT")
+
+        local exportSpotsButton = CreateFrame("Button", nil, transferFrame, "UIPanelButtonTemplate")
+        exportSpotsButton:SetSize(76, 22)
+        exportSpotsButton:SetPoint("BOTTOMRIGHT", transferFrame, "BOTTOMRIGHT", -174, 13)
+        exportSpotsButton:SetText("Export")
+        exportSpotsButton:SetScript("OnClick", function()
+            local exportText, errorMessage = ExportFishingLocations()
+            if not exportText then
+                transferStatus:SetText(errorMessage)
+                return
+            end
+            transferEditBox:SetText(exportText)
+            transferEditBox:SetFocus()
+            transferEditBox:HighlightText()
+            transferStatus:SetText("Export selected. Press Ctrl+C to copy it.")
+        end)
+
+        local importSpotsButton = CreateFrame("Button", nil, transferFrame, "UIPanelButtonTemplate")
+        importSpotsButton:SetSize(76, 22)
+        importSpotsButton:SetPoint("LEFT", exportSpotsButton, "RIGHT", 4, 0)
+        importSpotsButton:SetText("Import")
+        importSpotsButton:SetScript("OnClick", function()
+            local added, mergedOrError = ImportFishingLocations(transferEditBox:GetText())
+            if not added then
+                transferStatus:SetText(mergedOrError)
+                return
+            end
+            transferStatus:SetText(string.format("Added %d locations; merged %d existing.", added, mergedOrError))
+            RefreshLocationsPage(locationsScroll:GetVerticalScroll())
+        end)
+
+        local closeTransferButton = CreateFrame("Button", nil, transferFrame, "UIPanelButtonTemplate")
+        closeTransferButton:SetSize(76, 22)
+        closeTransferButton:SetPoint("LEFT", importSpotsButton, "RIGHT", 4, 0)
+        closeTransferButton:SetText("Close")
+        closeTransferButton:SetScript("OnClick", function() transferFrame:Hide() end)
+
+        OpenLocationTransfer = function()
+            transferFrame:Show()
+            transferEditBox:SetText("")
+            transferStatus:SetText("Export to copy locations, or paste an export and import it.")
+            transferEditBox:SetFocus()
+        end
+
+        local spotTransferButton = CreateFrame("Button", nil, locationsPage, "UIPanelButtonTemplate")
+        spotTransferButton:SetSize(102, 22)
+        spotTransferButton:SetPoint("RIGHT", atlasZoneDropdown, "LEFT", -4, 0)
+        spotTransferButton:SetText("Import / Export")
+        spotTransferButton:SetScript("OnClick", OpenLocationTransfer)
+
+        local locationSearch = CreateFrame("EditBox", "EasyFishingLocationSearch",
+            locationsPage, "InputBoxTemplate")
+        locationSearch:SetSize(134, 20)
+        locationSearch:SetPoint("RIGHT", spotTransferButton, "LEFT", -6, 0)
+        locationSearch:SetAutoFocus(false)
+        locationSearch:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Search fishing locations")
+            GameTooltip:AddLine("Matches zones, areas, fish names, and item IDs.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        locationSearch:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        locationSearch:SetScript("OnTextChanged", function(_, userInput)
+            if userInput and RefreshLocationsPage then
+                RefreshLocationsPage()
+            end
+        end)
 
         local locationRows = {}
         local expandedAreas = {}
-        local RefreshLocationsPage
+        StaticPopupDialogs["EASYFISHING_RENAME_SPOT"] = {
+            text = "Enter a name for this fishing location:",
+            button1 = ACCEPT,
+            button2 = CANCEL,
+            hasEditBox = true,
+            maxLetters = 48,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnShow = function(self)
+                self.editBox:SetText(self.data.spot.label or "")
+                self.editBox:SetFocus()
+                self.editBox:HighlightText()
+            end,
+            OnAccept = function(self)
+                if not self.data or not self.data.spot then return end
+                local label = self.editBox:GetText():match("^%s*(.-)%s*$")
+                self.data.spot.label = label ~= "" and label or nil
+                RefreshLocationsPage(self.data.scroll)
+            end,
+            EditBoxOnEnterPressed = function(self)
+                StaticPopup_OnClick(self:GetParent(), 1)
+            end,
+        }
+        local function SpotMatchesSearch(zoneName, spot)
+            local query = (locationSearch:GetText() or ""):lower():match("^%s*(.-)%s*$")
+            if query == "" then return true end
+            if zoneName:lower():find(query, 1, true)
+                or (spot.subzone or ""):lower():find(query, 1, true)
+                or (spot.label or ""):lower():find(query, 1, true) then
+                return true
+            end
+            for itemID, item in pairs(spot.itemsByID or {}) do
+                local itemName = type(item) == "table" and item.name or ""
+                if tostring(itemID):find(query, 1, true)
+                    or (itemName:lower():find(query, 1, true)) then
+                    return true
+                end
+            end
+            return false
+        end
         RefreshLocationsPage = function(scrollOffset)
             for _, row in ipairs(locationRows) do
                 row:Hide()
@@ -755,9 +1216,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             local spots = {}
             local stats = EF.EnsureFishingStats()
             for zoneName, zoneStats in pairs(stats.zones) do
-                if atlasZoneFilter == "All zones" or zoneName == atlasZoneFilter then
+                if atlasZoneFilter == "All zones" or atlasZoneFilter == "Favorites"
+                    or zoneName == atlasZoneFilter then
                     for _, spot in pairs(zoneStats.spots or {}) do
-                        if type(spot) == "table" and type(spot.itemsByID) == "table" then
+                        if type(spot) == "table" and type(spot.itemsByID) == "table"
+                            and (atlasZoneFilter ~= "Favorites" or spot.favorite)
+                            and SpotMatchesSearch(zoneName, spot) then
                             table.insert(spots, { zone = zoneName, spot = spot })
                         end
                     end
@@ -806,7 +1270,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
             if #groups == 0 then
-                if atlasZoneFilter == "All zones" then
+                if atlasZoneFilter == "Favorites" then
+                    locationsDescription:SetText("No matching favorites yet. Favorite a recorded location to keep it here.")
+                elseif atlasZoneFilter == "All zones" then
                     locationsDescription:SetText("No fishing locations recorded yet. Your first confirmed catch will add one.")
                 else
                     locationsDescription:SetText("No fishing locations recorded in " .. atlasZoneFilter .. " yet.")
@@ -882,6 +1348,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local row = locationRows[index]
                 if not row then
                     row = CreateFrame("Button", nil, locationsContent, "BackdropTemplate")
+                    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
                     row:SetSize(580, 50)
                     row:SetBackdrop({
                         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -901,10 +1368,21 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.areaLabel:SetWordWrap(false)
 
                     row.coordinateLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                    row.coordinateLabel:SetPoint("TOPRIGHT", row, "TOPRIGHT", -12, -8)
-                    row.coordinateLabel:SetWidth(130)
+                    row.coordinateLabel:SetWidth(100)
+                    row.coordinateLabel:SetPoint("TOPRIGHT", row, "TOPRIGHT", -36, -8)
                     row.coordinateLabel:SetJustifyH("RIGHT")
                     row.coordinateLabel:SetTextColor(0.72, 0.76, 0.76)
+
+                    row.favoriteButton = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+                    row.favoriteButton:SetSize(22, 22)
+                    row.favoriteButton:SetPoint("TOPRIGHT", row, "TOPRIGHT", -5, -3)
+                    row.favoriteButton:SetScript("OnEnter", function(self)
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText("Favorite location")
+                        GameTooltip:AddLine("Show it in the Favorites filter.", 1, 1, 1, true)
+                        GameTooltip:Show()
+                    end)
+                    row.favoriteButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
                     row.catchLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                     row.catchLabel:SetPoint("TOPLEFT", row.areaLabel, "BOTTOMLEFT", 0, -2)
@@ -920,6 +1398,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 row:SetPoint("TOPLEFT", locationsContent, "TOPLEFT", isNestedSpot and 12 or 0,
                     -((index - 1) * 54))
                 if entry.kind == "area" then
+                    row.favoriteButton:Hide()
                     row.areaLabel:SetText(areaLabel)
                     row.coordinateLabel:SetText((expandedAreas[group.key] and "- " or "+ ")
                         .. #group.spots .. " locations")
@@ -927,41 +1406,57 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row:SetBackdropColor(0.08, 0.07, 0.04, 0.82)
                     row:SetBackdropBorderColor(0.42, 0.34, 0.16, 1)
                 else
-                    row.areaLabel:SetText(entry.index and ("Location " .. entry.index) or areaLabel)
+                    row.favoriteButton:SetChecked(not not spot.favorite)
+                    row.favoriteButton:SetScript("OnClick", function(button)
+                        spot.favorite = button:GetChecked() and true or nil
+                        RefreshLocationsPage(locationsScroll:GetVerticalScroll())
+                    end)
+                    row.favoriteButton:Show()
+                    row.areaLabel:SetText(spot.label or (entry.index and ("Location " .. entry.index) or areaLabel))
                     row.coordinateLabel:SetText(string.format("%.1f, %.1f", spot.x * 100, spot.y * 100))
                     row.catchLabel:SetText(#fishSummary > 0 and table.concat(fishSummary, "  |  ") or "No item counts")
                     row:SetBackdropColor(0.04, 0.05, 0.05, 0.72)
                     row:SetBackdropBorderColor(0.24, 0.27, 0.27, 1)
                 end
-                row:SetScript("OnClick", function()
+                row:SetScript("OnClick", function(_, button)
+                    if entry.kind == "spot" and button == "RightButton" then
+                        StaticPopup_Show("EASYFISHING_RENAME_SPOT", nil, nil, {
+                            spot = spot,
+                            scroll = locationsScroll:GetVerticalScroll(),
+                        })
+                        return
+                    end
                     if entry.kind == "area" then
+                        if button == "RightButton" then return end
                         local currentScroll = locationsScroll:GetVerticalScroll()
                         expandedAreas[group.key] = not expandedAreas[group.key]
                         RefreshLocationsPage(currentScroll)
                         return
                     end
-                    if not C_Map or not C_Map.CanSetUserWaypointOnMap
-                        or not C_Map.SetUserWaypoint or not UiMapPoint
-                        or not UiMapPoint.CreateFromCoordinates
-                        or not C_Map.CanSetUserWaypointOnMap(spot.mapID) then
-                        print("EasyFishing: a waypoint cannot be set on this map.")
+                    local nativeWaypointSet = false
+                    if C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
+                        and UiMapPoint and UiMapPoint.CreateFromCoordinates
+                        and C_Map.CanSetUserWaypointOnMap(spot.mapID) then
+                        local point = UiMapPoint.CreateFromCoordinates(spot.mapID, spot.x, spot.y)
+                        nativeWaypointSet = point and C_Map.SetUserWaypoint(point) or false
+                    end
+                    local locationLabel = areaLabel
+                        .. (entry.index and (" / Location " .. entry.index) or "")
+                    local tomTomWaypointSet = SetTomTomWaypoint(spot, locationLabel)
+                    if not nativeWaypointSet and not tomTomWaypointSet then
+                        print("EasyFishing: neither the map nor TomTom can set a waypoint here.")
                         return
                     end
-                    local point = UiMapPoint.CreateFromCoordinates(spot.mapID, spot.x, spot.y)
-                    if not point or not C_Map.SetUserWaypoint(point) then
-                        print("EasyFishing: unable to set the fishing waypoint.")
-                        return
-                    end
-                    EasyFishingDB.lastFishingSpot = {
+                    characterDB.lastFishingSpot = {
                         mapID = spot.mapID,
                         x = spot.x,
                         y = spot.y,
-                        label = areaLabel .. (entry.index and (" / Location " .. entry.index) or ""),
+                        label = locationLabel,
                     }
-                    if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+                    if nativeWaypointSet and C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
                         C_SuperTrack.SetSuperTrackedUserWaypoint(true)
                     end
-                    if WorldMapFrame and WorldMapFrame.SetMapID then
+                    if nativeWaypointSet and WorldMapFrame and WorldMapFrame.SetMapID then
                         WorldMapFrame:SetMapID(spot.mapID)
                         if ShowUIPanel then ShowUIPanel(WorldMapFrame) else WorldMapFrame:Show() end
                     end
@@ -977,6 +1472,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                             or "Click to show recorded locations.", 1, 1, 1, true)
                     else
                         GameTooltip:SetText("Fish caught at this location")
+                        GameTooltip:AddLine("Left-click to set a waypoint; right-click to rename.",
+                            0.75, 0.75, 0.75, true)
                         for _, fishItem in ipairs(fish) do
                             GameTooltip:AddLine(string.format("%s: %d", fishItem.name, fishItem.count), 1, 1, 1)
                             local timeParts = {}
@@ -1009,15 +1506,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
         UIDropDownMenu_Initialize(atlasZoneDropdown, function()
-            local zones = { "All zones" }
+            local zones = { "All zones", "Favorites" }
+            local zoneNames = {}
             for zoneName in pairs(EF.EnsureFishingStats().zones) do
+                table.insert(zoneNames, zoneName)
+            end
+            table.sort(zoneNames)
+            for _, zoneName in ipairs(zoneNames) do
                 table.insert(zones, zoneName)
             end
-            table.sort(zones, function(first, second)
-                if first == "All zones" then return true end
-                if second == "All zones" then return false end
-                return first < second
-            end)
             for _, zoneName in ipairs(zones) do
                 local info = UIDropDownMenu_CreateInfo()
                 info.text = zoneName
@@ -1392,16 +1889,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         trainerHeaderName:SetText("NPC / Role")
 
         local trainerHeaderSide = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderSide:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 171, 0)
+        trainerHeaderSide:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 170, 0)
         trainerHeaderSide:SetText("Faction")
 
         local trainerHeaderLocation = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderLocation:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 247, 0)
-        trainerHeaderLocation:SetText("Zone / Area")
+        trainerHeaderLocation:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 242, 0)
+        trainerHeaderLocation:SetText("Town / Zone")
 
         local trainerHeaderCoordinates = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderCoordinates:SetPoint("TOPRIGHT", trainerHeaderName, "TOPLEFT", 572, 0)
+        trainerHeaderCoordinates:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 432, 0)
         trainerHeaderCoordinates:SetText("Coordinates")
+
+        local trainerHeaderWaypoint = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        trainerHeaderWaypoint:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 500, 0)
+        trainerHeaderWaypoint:SetText("Map")
 
         local trainerScroll = CreateFrame("ScrollFrame", "EasyFishingTrainerScrollFrame",
             guideTrainersView, "UIPanelScrollFrameTemplate")
@@ -1443,7 +1944,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             trainerIntro:SetText(string.format("%d of %d Fishing NPCs. Search by name, role, town, or zone.",
                 #trainers, #EF.Data.FISHING_NPCS))
-            trainerContent:SetHeight(math.max(36, #trainers * 36))
+            trainerContent:SetHeight(math.max(40, #trainers * 40))
             if #trainers == 0 then
                 trainerEmptyText:Show()
             else
@@ -1457,41 +1958,54 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local row = trainerRows[index]
                 if not row then
                     row = CreateFrame("Frame", nil, trainerContent)
-                    row:SetSize(590, 34)
+                    row:SetSize(590, 38)
 
                     row.background = row:CreateTexture(nil, "BACKGROUND")
                     row.background:SetAllPoints(row)
 
                     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -3)
-                    row.name:SetWidth(165)
+                    row.name:SetWidth(155)
                     row.name:SetJustifyH("LEFT")
+                    row.name:SetWordWrap(false)
 
                     row.role = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                     row.role:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
-                    row.role:SetWidth(165)
+                    row.role:SetWidth(155)
                     row.role:SetJustifyH("LEFT")
                     row.role:SetTextColor(0.72, 0.72, 0.72)
 
                     row.side = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.side:SetPoint("TOPLEFT", row, "TOPLEFT", 177, -7)
-                    row.side:SetWidth(68)
+                    row.side:SetPoint("TOPLEFT", row, "TOPLEFT", 170, -12)
+                    row.side:SetWidth(66)
                     row.side:SetJustifyH("LEFT")
 
                     row.location = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.location:SetPoint("TOPLEFT", row, "TOPLEFT", 253, -7)
-                    row.location:SetWidth(225)
+                    row.location:SetPoint("TOPLEFT", row, "TOPLEFT", 242, -3)
+                    row.location:SetWidth(180)
                     row.location:SetJustifyH("LEFT")
+                    row.location:SetWordWrap(false)
+
+                    row.zone = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    row.zone:SetPoint("TOPLEFT", row.location, "BOTTOMLEFT", 0, -1)
+                    row.zone:SetWidth(180)
+                    row.zone:SetJustifyH("LEFT")
+                    row.zone:SetTextColor(0.72, 0.72, 0.72)
+                    row.zone:SetWordWrap(false)
 
                     row.coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.coordinates:SetPoint("TOPRIGHT", row, "TOPRIGHT", -12, -7)
-                    row.coordinates:SetWidth(100)
+                    row.coordinates:SetPoint("TOPLEFT", row, "TOPLEFT", 432, -12)
+                    row.coordinates:SetWidth(64)
                     row.coordinates:SetJustifyH("RIGHT")
+
+                    row.waypointButton = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    row.waypointButton:SetSize(84, 22)
+                    row.waypointButton:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, -8)
                     trainerRows[index] = row
                 end
 
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 36))
+                row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 40))
                 row.background:SetColorTexture(0.55, 0.48, 0.3, index % 2 == 0 and 0.07 or 0.025)
                 row.name:SetText(trainer.name)
                 row.role:SetText(string.format("%s  |  Level %d", trainer.role, trainer.level))
@@ -1504,9 +2018,62 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.side:SetTextColor(1, 0.82, 0)
                 end
                 row.location:SetText(trainer.location and trainer.location ~= ""
-                    and (trainer.location .. ", " .. trainer.zone) or trainer.zone)
+                    and trainer.location or trainer.zone)
+                row.zone:SetText(trainer.location and trainer.location ~= "" and trainer.zone or "")
                 row.coordinates:SetText(trainer.x and trainer.y
                     and string.format("%.1f, %.1f", trainer.x, trainer.y) or "Not listed")
+                local hasWaypoint = tonumber(trainer.mapID)
+                    and tonumber(trainer.x) and tonumber(trainer.y)
+                    and trainer.x >= 0 and trainer.x <= 100
+                    and trainer.y >= 0 and trainer.y <= 100
+                if hasWaypoint then
+                    local npc = trainer
+                    row.waypointButton:SetText("Waypoint")
+                    row.waypointButton:Enable()
+                    row.waypointButton:SetScript("OnClick", function()
+                        local x, y = npc.x / 100, npc.y / 100
+                        local nativeWaypointSet = false
+                        if C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
+                            and UiMapPoint and UiMapPoint.CreateFromCoordinates
+                            and C_Map.CanSetUserWaypointOnMap(npc.mapID) then
+                            local point = UiMapPoint.CreateFromCoordinates(npc.mapID, x, y)
+                            nativeWaypointSet = point and C_Map.SetUserWaypoint(point) or false
+                        end
+                        local label = npc.name .. " - " .. (npc.location or npc.zone)
+                        local tomTomWaypointSet = SetTomTomWaypoint({
+                            mapID = npc.mapID,
+                            x = x,
+                            y = y,
+                        }, label)
+                        if nativeWaypointSet and C_SuperTrack
+                            and C_SuperTrack.SetSuperTrackedUserWaypoint then
+                            C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+                        end
+                        if not nativeWaypointSet and not tomTomWaypointSet then
+                            print("EasyFishing: neither the map nor TomTom can set this NPC waypoint.")
+                        end
+                    end)
+                    row.waypointButton:SetScript("OnEnter", function(button)
+                        GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+                        GameTooltip:SetText("Set waypoint for " .. npc.name)
+                        GameTooltip:AddLine(string.format("Approximate zone coordinates: %.1f, %.1f",
+                            npc.x, npc.y), 0.75, 0.75, 0.75)
+                        GameTooltip:Show()
+                    end)
+                    row.waypointButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                else
+                    row.waypointButton:SetText("No map")
+                    row.waypointButton:Disable()
+                    row.waypointButton:SetScript("OnClick", nil)
+                    row.waypointButton:SetScript("OnEnter", function(button)
+                        GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+                        GameTooltip:SetText("Waypoint unavailable")
+                        GameTooltip:AddLine("No verified map ID and coordinates are available for this NPC.",
+                            0.75, 0.75, 0.75, true)
+                        GameTooltip:Show()
+                    end)
+                    row.waypointButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                end
                 row:Show()
             end
         end
