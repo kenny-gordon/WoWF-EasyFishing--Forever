@@ -2,11 +2,34 @@
 
 > *Why tank when you can fish?*
 
-A lightweight, quality-of-life fishing companion for **WoW Forever**. Sit back, alt-tab, and let EasyFishing handle the bobber — your one-stop utility for the ultimate endless fishing grind.
+A quality-of-life fishing companion for **WoW Forever**. Cast with a mouse click, apply lures, track catches, and revisit recorded fishing locations. You must still click the bobber yourself when a fish bites; the addon does not automate fishing or work while you are away from the game.
 
 ---
 
 ## Features
+
+### Fishing Window
+`/ef` opens a dedicated EasyFishing window with Locations, Training, NPCs, Gear & Rewards, Statistics, and Journal tabs. It reopens the last tab used during the current login. Drag the title bar to move it; its position is saved per character. Close it with Escape or the close button. The window scales down on smaller screens, and the Fish Watcher remains a separate session overlay.
+
+The window's **Options** button opens Blizzard's addon settings. Those settings contain preferences and outfit selection, not the guide or catch-history tools. **Open EasyFishing** in Options brings you back to the fishing window.
+
+In Blizzard Options, **EasyFishing: Forever** is the splash page with the addon logo, version, and author. Expand it to find **General Options** underneath. The splash has buttons for General Options and the fishing window. `/ef about` opens the splash directly; `/ef options` opens General Options.
+
+### Fishing Controls and Keyboard Casting
+The compact fishing panel is labeled **EasyFishing** and shows readiness, pole-enchant time, and the number of lures you own that meet your current Fishing skill. **Eligible lures 0** means none are available at your current skill; the panel still casts Fishing when no lure can be applied. **Pause / Resume** pauses both EasyFishing mouse and keyboard casting, **Toggle Gear** switches outfits, and **Open** opens the fishing window. Each action has a tooltip. Middle-click and drag the panel to move it; its position is saved per character. Pause is temporary and resets on UI reload. The panel can be hidden in Options without disabling the keyboard binding.
+
+In Blizzard's Keybindings, find **EasyFishing: Forever**, then bind **Cast Fishing / Apply Lure**. Each player keypress applies an eligible lure or casts Fishing. Casting is disabled while paused, looting, moving, in combat, casting/channeling another spell, or without a pole. The mouse Click-to-Cast toggle only controls mouse casting; use Pause to disable both inputs. You still click the bobber yourself.
+
+### Launcher
+The minimap button opens or closes EasyFishing with left-click, opens Options with right-click, and toggles your outfit with middle-click. Drag the native button around the minimap to reposition it. Hide it in Options. If LibDataBroker is already loaded, EasyFishing also publishes a status feed; if LibDBIcon is present too, it manages the minimap button instead of creating a duplicate. No launcher libraries are required or bundled.
+
+### Fish Journal
+`/ef journal` opens searchable fish history with personal catch totals, saved-location observations, server-time buckets, and recorded catch dates/months in UTC. Select a fish, then select a location to set a native or TomTom waypoint. Personal totals exclude imported catches; saved-location observations can include imports. Older fish without saved locations remain listed. Catch dates begin with this update; missing historical dates are not invented. Observed months and times are not guaranteed seasons, availability, or catch probabilities.
+
+New location exports use **EFS3** to preserve catch dates. Imports still accept **EFS2** exports, which have no dates. Re-importing a snapshot merges counts conservatively rather than adding the same observations again. Older addon versions do not understand EFS3.
+
+### Loot Protection
+EasyFishing cancels pending mouse casts when loot becomes ready and blocks its mouse and keyboard casts until loot closes. Catch tracking observes both `LOOT_READY` and `LOOT_OPENED`, counts each item slot once per cast, and can fill in item links that arrive on later events. This improves fast-loot compatibility but cannot recover items another addon removes before EasyFishing observes them.
 
 ### 🎣 Double-Click to Cast
 With a fishing pole equipped, press the selected mouse button once or twice to cast **Fishing**.
@@ -18,17 +41,21 @@ With a fishing pole equipped, press the selected mouse button once or twice to c
 - Adjustable double-click delay (0.1s–0.8s)
 - Casts only from the game world when standing still, out of combat, with no mouseover target and no unit selected; clicks on UI controls never cast
 
+Double Click is the default and casts on the second press. Single Click casts when you release the selected mouse button. If clicking does nothing, run `/ef status` with the cursor over the game world to see the active button/pattern and any casting blocker. An eligible lure may be applied instead of casting Fishing on the first action.
+
 ### 🪝 Automatic Lures
 When enabled, the first click applies an eligible lure if your pole has none. By default it conserves stock by choosing the weakest available lure; enable **Use Strongest Available Lure** to choose the highest-bonus lure instead. Shiny Bauble requires skill 1, Nightcrawlers or Fish Lens require 50, and stronger lures require 100. Click again using the selected pattern to cast Fishing. If a lure is already active or none can be applied, the click casts Fishing directly.
 
 ### 🎣 Fish Watcher
-The optional watcher shows Fishing skill, time fishing, casts, skill gains, items per hour, items caught this session, items caught in the current zone, the latest catch, and this session's top catches. It stays visible while a fishing session is active, then hides when you move away or after two minutes without another cast. Statistics shows total fishing sessions, casts, time fishing, skill gains, items caught, per-zone activity, top catches, and catch rate. Catch-rate tracking begins with casts observed after installing this update; older lifetime cast totals are preserved but excluded from the rate. Only items shown in the Forever Fishing loot window are counted.
+The optional watcher uses a fixed native-style layout with separate status and zone lines, four aligned metrics, session/zone totals, items per hour, and item icons for the latest catch and top two session catches. Long item names stay contained; hover for the full item tooltip. Click a catch to open that fish in the journal; supported modified-item clicks use WoW's normal item handler. The close button hides the watcher and updates its Options checkbox; `/ef watch` or Options restores it during an active session. Middle-click and drag to move it.
+
+The watcher stays visible while a fishing session is active, then hides when you move away or after two minutes without another cast. Statistics refreshes while open and includes the current session's fishing time without adding it to saved totals twice. It shows sessions, casts, time fishing, skill gains, items caught, per-zone activity, top catches, and catch rate. Catch-rate tracking begins with casts observed after installing this update; older lifetime cast totals are preserved but excluded from the rate. Only items observed in Forever Fishing loot are counted.
 
 ### 🗺️ Fishing Locations
 The Locations tab records fish caught by zone, area, approximate map coordinates, and broad server-time ranges. Search by zone, area, fish name, or item ID; filter by zone or Favorites; expand an area to see its recorded locations. Left-click a location to set a Blizzard map waypoint; when TomTom is installed, EasyFishing also adds a transient TomTom marker and arrow. TomTom is an optional dependency; native waypoints work without it. Right-click a location to rename it, and use **Import / Export** to copy or merge saved locations between characters. Catches within 15 yards are combined into one location. This is a personal catch history, not a prefilled habitat list or a verified map of fishing-pool boundaries.
 
 ### 📖 Forever Fishing Guide
-The Guide has Training, Fishing NPCs, and Gear & Rewards views. Training highlights your current rank, progress, and next threshold; completed ranks are marked Done. Fishing NPCs searches 25 entries by name, role, faction, town, or zone. NPCs with a known map and coordinates have a waypoint action; entries without both are marked unavailable. Listed NPC coordinates are approximate, not verified spawn points. Gear & Rewards lists fishing bonuses, Find Fish, and notable quest rewards in one consistent list; select Find Fish to open the spellbook, then drag it to your action bar. Lure and campsite items use in-game icons and show bag counts; campsite tooltips include recipe materials and effects. The 225-300 leveling route is marked as undocumented in the source guide.
+The Guide has Training, Fishing NPCs, and Gear & Rewards views. Training highlights your trained rank when the client provides its skill cap, progress, and next threshold; a capped rank stays current until the next rank is trained. Without cap information, it falls back to skill brackets. Completed ranks are marked Done. Long training descriptions grow their rows inside a scrollable view. Fishing NPCs searches 25 entries by name, role, faction, town, or zone. NPCs with a known map and coordinates have a waypoint action; entries without both are marked unavailable. Listed NPC coordinates are approximate, not verified spawn points. Gear & Rewards lists fishing bonuses, Find Fish, and notable quest rewards in one consistent list; select Find Fish to open the spellbook, then drag it to your action bar. Lure and campsite items use in-game icons and show bag counts; campsite tooltips include recipe materials and effects. The 225-300 leveling route is marked as undocumented in the source guide.
 
 ### 🎒 Fishing Outfit
 Choose a saved Equipment Manager set for fishing. **Toggle Gear** switches between it and the saved set you wore before. Outfit switching is unavailable in combat, and your current gear must match a saved set before EasyFishing can remember it for restoration. Fishing statistics, locations, watcher position, and equipment-set choices are stored per character; general options remain account-wide. Existing shared history and gear selection migrate to the first character that logs in after updating because the old data did not record character ownership.
@@ -39,12 +66,12 @@ The optional Click-to-Move setting turns off auto-interact movement while a fish
 ### 🔊 Sound Automation
 Tired of alt-tabbing to silence or unmute WoW? EasyFishing automatically:
 
-- Turns **Sound Effects** and **Background Sound** on when you start fishing
+- Turns **Master Sound**, **Sound Effects**, and **Background Sound** on when you start fishing
 - Restores your original settings the moment you stop
 - Remembers your preferences across sessions
 
 ### ⚙️ In-Game Options Panel
-Everything is configurable from **Interface → AddOns → EasyFishing: Forever**:
+Preferences are configurable from **Interface → AddOns → EasyFishing: Forever → General Options**, or `/ef options`:
 
 | Setting | Description |
 |---|---|
@@ -55,6 +82,8 @@ Everything is configurable from **Interface → AddOns → EasyFishing: Forever*
 | Apply Lure Automatically | Apply an available lure before casting when none is active |
 | Use Strongest Available Lure | Prefer the highest-bonus eligible lure instead of conserving stronger lures |
 | Show Fish Watcher | Show or hide the session and zone tracking panel |
+| Show Fishing Controls | Show or hide the compact controls and lure status |
+| Show Minimap Button | Show or hide the launcher; broker feeds remain available |
 | Pause Click-to-Move With Pole | Temporarily pause auto-interact movement while the pole is equipped |
 | Turn Sound On While Fishing | Turn on game sound while fishing, then restore the previous setting |
 | Fishing Outfit | Select a saved Equipment Manager set, equip it, or restore the previous saved set |
@@ -63,10 +92,17 @@ Everything is configurable from **Interface → AddOns → EasyFishing: Forever*
 
 | Command | Action |
 |---|---|
-| `/ef` or `/easyfishing` | Open the Forever Fishing Guide |
+| `/ef` or `/easyfishing` | Open the fishing window on the last-used tab; Locations on first open |
+| `/ef options` or `/ef settings` | Open addon preferences in Blizzard Options |
+| `/ef about` | Open the EasyFishing splash page in Blizzard Options |
+| `/ef status` | Show the click button/pattern and why mouse casting is blocked or ready |
 | `/ef stats` | Open Statistics |
 | `/ef atlas` or `/ef locations` | Open Fishing Locations |
 | `/ef guide` | Open the Forever Fishing Guide |
+| `/ef npcs` or `/ef trainers` | Open Fishing NPCs |
+| `/ef gear` | Open Gear & Rewards |
+| `/ef journal` | Open the fish journal |
+| `/ef pause` or `/ef resume` | Pause or resume EasyFishing mouse and keyboard casting |
 | `/ef watch` | Toggle the Fish Watcher |
 | `/ef equip` | Equip the selected fishing outfit |
 | `/ef restore` | Restore the previous saved outfit |
@@ -85,7 +121,7 @@ To put the gear toggle on your action bar, create a macro and drag it onto a bar
 ```
 
 ### ID Data
-Fishing spell, lure, gear, campsite, reward, and NPC reference data are maintained in [Data.lua](EasyFishing/Data.lua). Caught-fish IDs, observed map locations, and equipment-set IDs are recorded or read from the client at runtime. The addon does not store trainer NPC IDs or claim exact waypoint coordinates for NPCs.
+Fishing spell, lure, gear, campsite, reward, and NPC reference data are maintained in [Data.lua](Data.lua). Caught-fish IDs, observed map locations, and equipment-set IDs are recorded or read from the client at runtime. The addon does not store trainer NPC IDs or claim exact waypoint coordinates for NPCs.
 
 ---
 
@@ -95,3 +131,40 @@ Fishing spell, lure, gear, campsite, reward, and NPC reference data are maintain
 1. Download the latest release
 2. Extract the `EasyFishing` folder into `<WoW installation>/Interface/AddOns/`
 3. Launch WoW and enable **EasyFishing: Forever** in the AddOns list.
+
+## In-game checks
+
+After updating the addon on the Forever client, enable Lua errors (`/console scriptErrors 1`) and reload the UI. With a pole equipped and no target selected:
+
+1. Try both click patterns on the world and confirm that UI clicks, combat, movement, and clicks on units do not cast. Confirm that a lure is applied only when the pole has no lure.
+2. Start and stop fishing with sound automation enabled. Verify that Master Sound, Sound Effects, and Background Sound return to their previous values after stopping, moving, and `/reload`.
+3. Catch a fish, check the watcher and Statistics, select its location, then try `/ef link location`. Check both with and without TomTom enabled.
+4. Export and re-import locations. Confirm the location count and catch totals do not increase on a second import. Toggle fishing gear and confirm the previous saved set is restored.
+5. Open `/ef`, switch through every tab, drag the window, and close it with Escape. Reopen it to check the selected tab, then `/reload` to check its position. Verify `/ef options` contains preferences only and **Open EasyFishing** returns to the tools. Check the window at your normal UI scale and a smaller resolution.
+6. Bind the fishing key, then test casting and applying a lure. Check both global action-button key-down preferences. Verify Pause, movement, other spells, combat, and an open loot window prevent EasyFishing casts; enter combat with a mouse binding armed and check normal mouse input still works.
+7. Test a catch with your usual fast-loot addon enabled. Check Journal search, location waypoints, dates, and an EFS3 export/import round trip. Verify older EFS2 imports still work. Test launcher clicks, dragging, visibility options, and broker integration when available.
+8. Check the watcher's empty/latest/top-catch rows, long item names, tooltips, close button, and selected-fish journal action. Verify its checkbox stays synchronized. Leave Statistics or a guide page open while fishing or changing bags; verify values refresh. Resize the client and check the tool window refits. Check transfer messages stay above the buttons and the dialog closes when the main window closes.
+
+## Feature Direction
+
+Prioritize a complete fishing workflow over a long feature checklist: reliable casting and lure controls, clear session tracking, useful recorded catch locations, and safe equipment switching. Keep reference information accessible without crowding configuration. Tournament timers and additional fishing alerts should have verified Forever data and a clear place in that workflow before implementation. Camera-scanning bobber helpers and automatic item disposal are not included.
+
+## UI Conventions
+
+- Use Blizzard's dialog artwork for tool windows and dialogs, and tooltip artwork for compact overlays. Main and transfer windows share the same backdrop styling.
+- Use native GameFont styles, buttons, checkboxes, dropdowns, sliders, scrollbars, item icons, and GameTooltip. Gold identifies headings and important values; neutral surfaces keep lists readable.
+- Keep feature tools in the fishing window and preferences in Blizzard Options. Preserve Escape-to-close, predictable tab navigation, and saved window positions.
+- Keep dependencies optional and purposeful. Ace libraries are not required for this design. Consider AceDB-3.0 if account/character settings grow into selectable profiles. The launcher integrates with LibDataBroker-1.1 and LibDBIcon-1.0 when already loaded; neither is bundled or required. AceGUI and AceConfig are not needed merely to make native controls look polished.
+
+## Automated Audit
+
+The development-only runner in [tests/audit.js](tests/audit.js) parses the manifest's Lua files as Lua 5.1, compiles and loads them with Fengari, then exercises full login and feature pages against mocked WoW APIs. Six configurations cover modern/legacy Settings with native, broker-only, and broker/icon launchers. Tests cover watcher catch actions/visibility, checkbox synchronization, dropdown choices, slider bounds, trained-rank boundaries, tall description layouts, typed icon fallbacks, display changes, Options/tool navigation, popup APIs and Unicode labels, pause/cast preparation, combat snippets, loot protection and delayed links, lures, launchers, journal workflows, EFS2/EFS3 transfers, equipment/chat links, waypoints, session timing, and master/effects/background audio restoration. Layout checks use mock frame properties and text-height stress cases, not rendered WoW pixels.
+
+From the addon folder in PowerShell, install test tools outside the addon and run:
+
+```powershell
+npm install --prefix "$env:TEMP\easyfishing-validation" fengari luaparse --no-audit --no-fund --ignore-scripts
+node tests/audit.js
+```
+
+Node and these packages are not addon dependencies and are never loaded by WoW. The runner does not simulate protected spell execution or render Blizzard frames. Passing it does not establish that the addon is bug-free; use the in-game checks above, especially click timing, UI interactions, and entering combat while a double-click binding is armed.

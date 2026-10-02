@@ -8,6 +8,8 @@ local MAX_DOUBLE_CLICK = 0.4
 local lastClickTime = 0
 local pendingClearTimer = nil
 local clearBindingOnMouseUp = false
+local lootOpen = false
+local fishingPaused = false
 
 local DB_DEFAULTS = {
     enableDoubleClick = true,
@@ -19,6 +21,8 @@ local DB_DEFAULTS = {
     doubleClickDelay = 0.4,
     doubleClickButton = "LeftButton",
     castClickMode = "DoubleClick",
+    showFishingControls = true,
+    showMinimapButton = true,
 }
 
 local CHARACTER_DB_MIGRATION_KEYS = {
@@ -38,7 +42,7 @@ local function GetCharacterDB()
 end
 
 local function InitializeCharacterDB()
-    EasyFishingDB = EasyFishingDB or {}
+    if type(EasyFishingDB) ~= "table" then EasyFishingDB = {} end
     local characterDB = GetCharacterDB()
     for _, key in ipairs(CHARACTER_DB_MIGRATION_KEYS) do
         if characterDB[key] == nil and EasyFishingDB[key] ~= nil then
@@ -46,8 +50,11 @@ local function InitializeCharacterDB()
         end
         EasyFishingDB[key] = nil
     end
-    if characterDB.fishWatcherX == nil then characterDB.fishWatcherX = 0 end
-    if characterDB.fishWatcherY == nil then characterDB.fishWatcherY = 160 end
+    for key, default in pairs({ fishWatcherX = 0, fishWatcherY = 160, windowX = 0, windowY = 0,
+        controlsX = 0, controlsY = -220 }) do
+        local value = tonumber(characterDB[key])
+        characterDB[key] = value and value == value and math.abs(value) < math.huge and value or default
+    end
     return characterDB
 end
 
@@ -70,13 +77,31 @@ for _, option in ipairs(BUTTON_OPTIONS) do
 end
 
 local function GetButtonOption(key)
-    return BUTTON_BY_KEY[key] or BUTTON_BY_KEY["RightButton"]
+    return BUTTON_BY_KEY[key] or BUTTON_BY_KEY[DB_DEFAULTS.doubleClickButton]
+end
+
+local function InitializeSettings()
+    if type(EasyFishingDB) ~= "table" then EasyFishingDB = {} end
+    for key, default in pairs(DB_DEFAULTS) do
+        if type(EasyFishingDB[key]) ~= type(default) then
+            EasyFishingDB[key] = default
+        end
+    end
+    if not BUTTON_BY_KEY[EasyFishingDB.doubleClickButton] then
+        EasyFishingDB.doubleClickButton = DB_DEFAULTS.doubleClickButton
+    end
+    if EasyFishingDB.castClickMode ~= "SingleClick" and EasyFishingDB.castClickMode ~= "DoubleClick" then
+        EasyFishingDB.castClickMode = DB_DEFAULTS.castClickMode
+    end
+    local delay = EasyFishingDB.doubleClickDelay
+    if delay ~= delay then delay = DB_DEFAULTS.doubleClickDelay end
+    EasyFishingDB.doubleClickDelay = math.max(0.1, math.min(0.8, delay))
 end
 
 local function IsFishingPoleEquipped()
     local mainHand = GetInventoryItemID("player", DATA.MAIN_HAND_SLOT)
     if not mainHand then return false end
-    local classID, subclassID
+    local _, classID, subclassID
     if C_Item and C_Item.GetItemInfoInstant then
         _, _, _, _, _, classID, subclassID = C_Item.GetItemInfoInstant(mainHand)
     elseif GetItemInfoInstant then
@@ -108,16 +133,23 @@ local function IsFishingChannelActive()
 end
 
 local function IsMouseOverWorld()
-    return type(GetMouseFocus) == "function" and GetMouseFocus() == WorldFrame
+    if type(GetMouseFocus) == "function" then
+        return GetMouseFocus() == WorldFrame
+    end
+    if type(GetMouseFoci) == "function" then
+        local foci = GetMouseFoci()
+        return type(foci) == "table" and #foci == 1 and foci[1] == WorldFrame
+    end
+    return false
 end
 
 local function GetFishingSkill()
     if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
         local _, _, _, fishingIndex = GetProfessions()
         if fishingIndex then
-            local _, _, skillLevel = GetProfessionInfo(fishingIndex)
+            local _, _, skillLevel, maximumSkill = GetProfessionInfo(fishingIndex)
             if type(skillLevel) == "number" then
-                return skillLevel
+                return skillLevel, tonumber(maximumSkill)
             end
         end
     end
@@ -125,9 +157,9 @@ local function GetFishingSkill()
     if not GetNumSkillLines or not GetSkillLineInfo then return nil end
     local fishingName = GetFishingSpellName()
     for index = 1, GetNumSkillLines() do
-        local skillName, isHeader, _, rank = GetSkillLineInfo(index)
+        local skillName, isHeader, _, rank, _, _, maximumSkill = GetSkillLineInfo(index)
         if not isHeader and skillName == fishingName and type(rank) == "number" then
-            return rank
+            return rank, tonumber(maximumSkill)
         end
     end
 end
@@ -289,6 +321,16 @@ local function SetCVarSound(val)
     end
 end
 
+local function GetCVarMasterSound()
+    if C_CVar and C_CVar.GetCVar then return C_CVar.GetCVar("Sound_EnableAllSound") end
+    return GetCVar("Sound_EnableAllSound")
+end
+
+local function SetCVarMasterSound(value)
+    if C_CVar and C_CVar.SetCVar then C_CVar.SetCVar("Sound_EnableAllSound", value)
+    else SetCVar("Sound_EnableAllSound", value) end
+end
+
 local savedAutoInteractSetting = nil
 
 local function GetAutoInteractSetting()
@@ -318,6 +360,7 @@ local function UpdateAutoInteractSetting()
     local shouldDisable = EasyFishingDB
         and EasyFishingDB.disableClickToMoveWhileFishing
         and EasyFishingDB.enableDoubleClick
+        and not fishingPaused
         and IsFishingPoleEquipped()
 
     if shouldDisable then
@@ -339,7 +382,13 @@ end
 -- ---------------------------------------------------------------------------
 
 -- This frame is used purely as the *owner* of the override binding.
-local castOwner = CreateFrame("Frame", "EasyFishingCastOwner", UIParent)
+local castOwner = CreateFrame("Frame", "EasyFishingCastOwner", UIParent, "SecureHandlerStateTemplate")
+castOwner:SetAttribute("_onstate-efcombat", [[
+    if newstate == "combat" then self:ClearBindings() end
+]])
+if RegisterStateDriver then
+    RegisterStateDriver(castOwner, "efcombat", "[combat] combat; safe")
+end
 
 local function CancelPendingTimer()
     if pendingClearTimer then
@@ -358,36 +407,123 @@ local function ClearBinding()
 end
 
 local autoLureButton = CreateFrame(
-    "Button", "EasyFishingAutoLureButton", UIParent, "SecureActionButtonTemplate")
+    "Button", "EasyFishingAutoLureButton", UIParent, "SecureActionButtonTemplate,SecureHandlerStateTemplate")
 autoLureButton:SetSize(1, 1)
 autoLureButton:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -10, -10)
 autoLureButton:SetAlpha(0)
-autoLureButton:RegisterForClicks("LeftButtonDown")
+autoLureButton:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+autoLureButton:SetAttribute("useOnKeyDown", true)
 autoLureButton:Show()
 
-local function BindCastAction(buttonName)
-    local option = GetButtonOption(buttonName)
-    local lureID = GetAutoLureID()
+local keyboardCastButton = CreateFrame(
+    "Button", "EasyFishingKeyboardCastButton", UIParent, "SecureActionButtonTemplate,SecureHandlerStateTemplate")
+keyboardCastButton:SetSize(1, 1)
+keyboardCastButton:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -10, -10)
+keyboardCastButton:SetAlpha(0)
+keyboardCastButton:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+keyboardCastButton:Show()
 
-    if lureID then
-        autoLureButton:SetAttribute("type", "item")
-        autoLureButton:SetAttribute("item", "item:" .. lureID)
-        autoLureButton:SetAttribute("target-slot", DATA.MAIN_HAND_SLOT)
-        autoLureButton:SetAttribute("spell", nil)
-    else
-        autoLureButton:SetAttribute("type", "spell")
-        autoLureButton:SetAttribute("spell", GetFishingSpellName())
-        autoLureButton:SetAttribute("item", nil)
-        autoLureButton:SetAttribute("target-slot", nil)
+for _, button in ipairs({ autoLureButton, keyboardCastButton }) do
+    button:SetAttribute("_onstate-efcombat", [[
+        if newstate == "combat" then self:SetAttribute("type", nil) end
+    ]])
+    if RegisterStateDriver then
+        RegisterStateDriver(button, "efcombat", "[combat] combat; safe")
     end
+end
+
+local function CanStartFishing()
+    return not fishingPaused and not lootOpen and not InCombatLockdown()
+        and not UnitChannelInfo("player")
+        and (not UnitCastingInfo or not UnitCastingInfo("player"))
+        and GetUnitSpeed("player") == 0 and IsFishingPoleEquipped()
+end
+
+local function PrepareCastAction(button)
+    local lureID = GetAutoLureID()
+    button:SetAttribute("type", lureID and "item" or "spell")
+    button:SetAttribute("item", lureID and ("item:" .. lureID) or nil)
+    button:SetAttribute("target-slot", lureID and DATA.MAIN_HAND_SLOT or nil)
+    button:SetAttribute("spell", not lureID and GetFishingSpellName() or nil)
+end
+
+local function UpdateKeyboardCastAction()
+    if InCombatLockdown() then return end
+    if CanStartFishing() then
+        PrepareCastAction(keyboardCastButton)
+    else
+        keyboardCastButton:SetAttribute("type", nil)
+    end
+end
+keyboardCastButton:SetScript("PreClick", UpdateKeyboardCastAction)
+autoLureButton:SetScript("PreClick", function(self)
+    if InCombatLockdown() then return end
+    if not CanStartFishing() or not IsMouseOverWorld() or UnitExists("mouseover") or UnitExists("target") then
+        self:SetAttribute("type", nil)
+        ClearBinding()
+    end
+end)
+autoLureButton:SetScript("PostClick", function(_, _, down)
+    local singleClick = EasyFishingDB.castClickMode == "SingleClick"
+    if (singleClick and not down) or (not singleClick and down) then ClearBinding() end
+end)
+
+local function SetFishingPaused(value)
+    fishingPaused = not not value
+    ClearBinding()
+    UpdateAutoInteractSetting()
+    UpdateKeyboardCastAction()
+    if EF.UpdateFishingControls then EF.UpdateFishingControls() end
+end
+
+local function GetLureStatus()
+    local active, remainingMS = GetWeaponEnchantInfo()
+    if not IsFishingPoleEquipped() then active, remainingMS = false, 0 end
+    local available, count = GetAvailableLures(), 0
+    for _, lure in ipairs(available) do count = count + lure.count end
+    return {
+        active = not not active,
+        seconds = math.max(0, (tonumber(remainingMS) or 0) / 1000),
+        count = count,
+        nextLureID = GetAutoLureID(),
+    }
+end
+
+local function BindCastAction(buttonName)
+    if not CanStartFishing() then return end
+    local option = GetButtonOption(buttonName)
+    PrepareCastAction(autoLureButton)
+    autoLureButton:SetAttribute("useOnKeyDown", EasyFishingDB.castClickMode ~= "SingleClick")
 
     SetOverrideBindingClick(
         castOwner, true, option.binding, autoLureButton:GetName(), "LeftButton")
 end
 
+local function GetMouseFishingStatus()
+    if not EasyFishingDB.enableDoubleClick then return "Click-to-Cast is disabled." end
+    if fishingPaused then return "Fishing is paused. Use /ef resume." end
+    if InCombatLockdown() then return "Casting is blocked in combat." end
+    if lootOpen then return "Casting is blocked while loot is open." end
+    if not IsFishingPoleEquipped() then return "No fishing pole detected in the main hand." end
+    if UnitChannelInfo("player") or UnitCastingInfo and UnitCastingInfo("player") then
+        return "A spell is already being cast or channeled."
+    end
+    if GetUnitSpeed("player") > 0 then return "Stand still to cast." end
+    if UnitExists("target") then return "Clear your selected target to cast." end
+    if UnitExists("mouseover") then return "Move the cursor away from units to cast." end
+    if not IsMouseOverWorld() then return "Move the cursor over the game world, not a UI control." end
+    local lureID = GetAutoLureID()
+    local button = GetButtonOption(EasyFishingDB.doubleClickButton).label
+    local clickPattern = EasyFishingDB.castClickMode == "SingleClick" and "single-click " or "double-click "
+    local ready = "Ready: " .. clickPattern .. button .. "."
+    if lureID then return ready .. " Next action applies lure " .. lureID .. "." end
+    return ready .. " Next action casts Fishing."
+end
+
 
 EF.MIN_DOUBLE_CLICK = MIN_DOUBLE_CLICK
 EF.DB_DEFAULTS = DB_DEFAULTS
+EF.InitializeSettings = InitializeSettings
 EF.GetCharacterDB = GetCharacterDB
 EF.InitializeCharacterDB = InitializeCharacterDB
 EF.BUTTON_OPTIONS = BUTTON_OPTIONS
@@ -406,11 +542,22 @@ EF.GetCVarBG = GetCVarBG
 EF.SetCVarBG = SetCVarBG
 EF.GetCVarSound = GetCVarSound
 EF.SetCVarSound = SetCVarSound
+EF.GetCVarMasterSound = GetCVarMasterSound
+EF.SetCVarMasterSound = SetCVarMasterSound
 EF.UpdateAutoInteractSetting = UpdateAutoInteractSetting
 EF.RestoreAutoInteractSetting = RestoreAutoInteractSetting
 EF.ClearBinding = ClearBinding
 EF.CancelPendingTimer = CancelPendingTimer
 EF.BindCastAction = BindCastAction
+EF.IsLootOpen = function() return lootOpen end
+EF.IsFishingPaused = function() return fishingPaused end
+EF.SetFishingPaused = SetFishingPaused
+EF.CanStartFishing = CanStartFishing
+EF.GetLureStatus = GetLureStatus
+EF.GetMouseFishingStatus = GetMouseFishingStatus
+EF.UpdateKeyboardCastAction = UpdateKeyboardCastAction
+_G.BINDING_HEADER_EASYFISHING = "EasyFishing: Forever"
+_G["BINDING_NAME_CLICK EasyFishingKeyboardCastButton:LeftButton"] = "Cast Fishing / Apply Lure"
 EF.SetDoubleClickDelay = function(value) MAX_DOUBLE_CLICK = value end
 EF.GetDoubleClickDelay = function() return MAX_DOUBLE_CLICK end
 
@@ -420,15 +567,40 @@ function EF.InitializeClickHandling()
     clickFrame:RegisterEvent("GLOBAL_MOUSE_UP")
     clickFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
     clickFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    clickFrame:RegisterEvent("LOOT_OPENED")
+    clickFrame:RegisterEvent("LOOT_READY")
+    clickFrame:RegisterEvent("LOOT_CLOSED")
+    for _, event in ipairs({ "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING",
+        "PLAYER_EQUIPMENT_CHANGED", "BAG_UPDATE_DELAYED", "SKILL_LINES_CHANGED",
+        "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
+        "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" }) do
+        clickFrame:RegisterEvent(event)
+    end
+    UpdateKeyboardCastAction()
     clickFrame:SetScript("OnEvent", function(_, evt, buttonName)
+        if evt == "LOOT_READY" or evt == "LOOT_OPENED" or evt == "LOOT_CLOSED" then
+            lootOpen = evt ~= "LOOT_CLOSED"
+            ClearBinding()
+            UpdateKeyboardCastAction()
+            return
+        end
         if evt == "PLAYER_REGEN_DISABLED" or evt == "PLAYER_REGEN_ENABLED" then
             ClearBinding()
+            UpdateKeyboardCastAction()
+            return
+        end
+        if evt ~= "GLOBAL_MOUSE_DOWN" and evt ~= "GLOBAL_MOUSE_UP" then
+            if evt:find("^UNIT_") and buttonName ~= "player" then return end
+            ClearBinding()
+            UpdateKeyboardCastAction()
             return
         end
 
         if evt == "GLOBAL_MOUSE_UP" then
             if clearBindingOnMouseUp then
-                ClearBinding()
+                clearBindingOnMouseUp = false
+                CancelPendingTimer()
+                pendingClearTimer = C_Timer.NewTimer(0, ClearBinding)
                 return
             end
 
@@ -437,6 +609,8 @@ function EF.InitializeClickHandling()
             end
 
             if GetTime() - lastClickTime > MAX_DOUBLE_CLICK
+                or lootOpen
+                or fishingPaused
                 or not EasyFishingDB.enableDoubleClick
                 or InCombatLockdown()
                 or IsFishingChannelActive()
@@ -462,6 +636,8 @@ function EF.InitializeClickHandling()
         end
 
         if not EasyFishingDB.enableDoubleClick
+            or lootOpen
+            or fishingPaused
             or InCombatLockdown()
             or IsFishingChannelActive()
             or not IsFishingPoleEquipped()

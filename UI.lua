@@ -1,7 +1,6 @@
-local _, EF = ...
+local addonName, EF = ...
 EF = EF or _G.EasyFishing
 
-local DB_DEFAULTS = EF.DB_DEFAULTS
 local BUTTON_OPTIONS = EF.BUTTON_OPTIONS
 local CAST_MODE_OPTIONS = EF.CAST_MODE_OPTIONS
 local GetButtonOption = EF.GetButtonOption
@@ -11,6 +10,122 @@ local EquipFishingOutfit = EF.EquipFishingOutfit
 local RestorePreviousEquipmentSet = EF.RestorePreviousEquipmentSet
 local ToggleFishingOutfit = EF.ToggleFishingOutfit
 local GetFishingSkill = EF.GetFishingSkill
+local UI_COLORS = {
+    accent = { 1, 0.82, 0 },
+    divider = { 0.55, 0.55, 0.55, 0.5 },
+    row = { 1, 1, 1 },
+    muted = { 0.72, 0.72, 0.72 },
+    spotBackground = { 0, 0, 0, 0.5 },
+    spotBorder = { 0.4, 0.4, 0.4, 1 },
+    spotHover = { 0.12, 0.12, 0.12, 0.9 },
+    areaBackground = { 0.08, 0.08, 0.08, 0.82 },
+    areaBorder = { 0.6, 0.6, 0.6, 1 },
+    hoverBorder = { 1, 0.82, 0, 1 },
+}
+
+local function ApplyDialogStyle(frame)
+    frame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 32,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 },
+    })
+    frame:SetBackdropColor(1, 1, 1, 1)
+    frame:SetBackdropBorderColor(1, 1, 1, 1)
+end
+
+local function EncodeCatchDates(item)
+    local days, entries = {}, {}
+    for day in pairs(item.datesByDay or {}) do table.insert(days, day) end
+    table.sort(days)
+    for _, day in ipairs(days) do
+        table.insert(entries, day .. "=" .. tostring(item.datesByDay[day]))
+    end
+    return table.concat(entries, ";")
+end
+
+local function DecodeCatchDates(text, itemCount)
+    local dates, entries = {}, 0
+    for entry in text:gmatch("[^;]+") do
+        entries = entries + 1
+        local day, amount = entry:match("^(%d%d%d%d%-%d%d%-%d%d)=(%d+)$")
+        local count = tonumber(amount)
+        if not day or not count or count < 1 or count > itemCount or entries > 10000 or dates[day] then return end
+        local year, month, monthDay = tonumber(day:sub(1, 4)), tonumber(day:sub(6, 7)), tonumber(day:sub(9, 10))
+        local daysInMonth = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+        if year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0) then daysInMonth[2] = 29 end
+        if year < 2000 or year > 9999 or not daysInMonth[month]
+            or monthDay < 1 or monthDay > daysInMonth[month] then return end
+        dates[day] = count
+    end
+    return dates
+end
+
+local function LabelLength(text)
+    if strlenutf8 then return strlenutf8(text) end
+    local _, length = text:gsub("[^\128-\191]", "")
+    return length
+end
+
+local function PopupEditBox(dialog)
+    return dialog.EditBox or dialog.editBox or (dialog.GetEditBox and dialog:GetEditBox())
+end
+
+local function CreateOptionsSplash(parent, openSettings)
+    local page = CreateFrame("Frame", "EasyFishingOptionsPanel", parent)
+    page.name = "EasyFishing: Forever"
+    page:Hide()
+    local logo = page:CreateTexture(nil, "ARTWORK")
+    logo:SetSize(192, 192)
+    logo:SetPoint("TOP", page, "TOP", 0, -40)
+    logo:SetTexture("Interface\\AddOns\\" .. addonName .. "\\EasyFishing.tga")
+
+    local title = page:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOP", logo, "BOTTOM", 0, -18)
+    title:SetText(page.name)
+    local metadata = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+    local version = metadata and metadata(addonName, "Version") or "unknown"
+    local author = metadata and metadata(addonName, "Author")
+    local versionText = page:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    versionText:SetPoint("TOP", title, "BOTTOM", 0, -10)
+    versionText:SetText("Version " .. version)
+    local authorText = page:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    authorText:SetPoint("TOP", versionText, "BOTTOM", 0, -8)
+    authorText:SetText(author or "")
+    local tagline = page:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    tagline:SetPoint("TOP", authorText, "BOTTOM", 0, -20)
+    tagline:SetText("Why tank when you can fish?")
+
+    local settingsButton = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    settingsButton:SetSize(166, 26)
+    settingsButton:SetPoint("TOPRIGHT", tagline, "BOTTOM", -4, -24)
+    settingsButton:SetText("General Options")
+    settingsButton:SetScript("OnClick", openSettings)
+    local toolsButton = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+    toolsButton:SetSize(166, 26)
+    toolsButton:SetPoint("TOPLEFT", tagline, "BOTTOM", 4, -24)
+    toolsButton:SetText("Open EasyFishing")
+    toolsButton:SetScript("OnClick", function() EF.OpenWindow("home") end)
+    return page
+end
+
+local function SetFontColor(fontString, color)
+    fontString:SetTextColor(color[1], color[2], color[3], color[4])
+end
+
+local function SetTextureColor(texture, color, alpha)
+    texture:SetColorTexture(color[1], color[2], color[3], alpha or color[4])
+end
+
+local function SetBackdropColors(frame, background, border)
+    frame:SetBackdropColor(background[1], background[2], background[3], background[4])
+    frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4])
+end
+
+local function SetStripedRow(texture, index)
+    texture:SetColorTexture(UI_COLORS.row[1], UI_COLORS.row[2], UI_COLORS.row[3],
+        index % 2 == 0 and 0.07 or 0.025)
+end
 
 local function OpenChatWithLinks(text)
     if not text or text == "" then
@@ -45,6 +160,7 @@ local function GetOwnedItemCount(itemID)
 end
 
 local function GetItemTexture(itemID)
+        if not itemID then return nil end
     local _, _, _, _, icon
     if C_Item and C_Item.GetItemInfoInstant then
         _, _, _, _, icon = C_Item.GetItemInfoInstant(itemID)
@@ -55,11 +171,17 @@ local function GetItemTexture(itemID)
 end
 
 local function GetSpellIcon(spellID)
+        if not spellID then return nil end
     if C_Spell and C_Spell.GetSpellTexture then
         return C_Spell.GetSpellTexture(spellID)
     elseif type(GetSpellTexture) == "function" then
         return GetSpellTexture(spellID)
     end
+end
+
+local function GetReferenceIcon(entry)
+    if entry.iconType == "spell" then return GetSpellIcon(entry.id) end
+    return GetItemTexture(entry.id)
 end
 
 local function ShareLastFish()
@@ -101,26 +223,52 @@ end
 
 local function ShareFishingLocation()
     local spot = EF.GetCharacterDB().lastFishingSpot
-    if spot and C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
-        and UiMapPoint and UiMapPoint.CreateFromCoordinates
-        and C_Map.CanSetUserWaypointOnMap(spot.mapID) then
-        local point = UiMapPoint.CreateFromCoordinates(spot.mapID, spot.x, spot.y)
-        if point then
-            C_Map.SetUserWaypoint(point)
-            if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
-                C_SuperTrack.SetSuperTrackedUserWaypoint(true)
-            end
-        end
-    end
-    if spot then SetTomTomWaypoint(spot, spot.label or "Fishing location") end
-
-    local hyperlink = C_Map and C_Map.GetUserWaypointHyperlink and C_Map.GetUserWaypointHyperlink()
-    if not hyperlink or hyperlink == "" then
-        print("EasyFishing: select an atlas location or set a map waypoint first.")
+    if not spot then
+        print("EasyFishing: select a fishing location first.")
         return
     end
-    local label = spot and spot.label and (spot.label .. " ") or ""
+    if not C_Map or not C_Map.CanSetUserWaypointOnMap or not C_Map.SetUserWaypoint
+        or not C_Map.GetUserWaypointHyperlink or not UiMapPoint
+        or not UiMapPoint.CreateFromCoordinates or not C_Map.CanSetUserWaypointOnMap(spot.mapID) then
+        print("EasyFishing: this location cannot be shared as a map waypoint.")
+        return
+    end
+    local point = UiMapPoint.CreateFromCoordinates(spot.mapID, spot.x, spot.y)
+    if not point or not C_Map.SetUserWaypoint(point) then
+        print("EasyFishing: this location cannot be shared as a map waypoint.")
+        return
+    end
+    if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+        C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+    end
+    SetTomTomWaypoint(spot, spot.label or "Fishing location")
+
+    local hyperlink = C_Map.GetUserWaypointHyperlink()
+    if not hyperlink or hyperlink == "" then
+        print("EasyFishing: a map waypoint link is unavailable on this client.")
+        return
+    end
+    local label = spot.label and (spot.label .. " ") or ""
     OpenChatWithLinks(label .. hyperlink)
+end
+
+function EF.SetFishingWaypoint(spot, label)
+    local native = false
+    if C_Map and C_Map.CanSetUserWaypointOnMap and C_Map.SetUserWaypoint
+        and UiMapPoint and UiMapPoint.CreateFromCoordinates and C_Map.CanSetUserWaypointOnMap(spot.mapID) then
+        local point = UiMapPoint.CreateFromCoordinates(spot.mapID, spot.x, spot.y)
+        native = point and C_Map.SetUserWaypoint(point) or false
+    end
+    local tomTom = SetTomTomWaypoint(spot, label)
+    if not native and not tomTom then
+        print("EasyFishing: neither the map nor TomTom can set a waypoint here.")
+        return false
+    end
+    EF.GetCharacterDB().lastFishingSpot = { mapID = spot.mapID, x = spot.x, y = spot.y, label = label }
+    if native and C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+        C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+    end
+    return true
 end
 
 local function ShareFishingOutfit()
@@ -166,12 +314,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
     if event == "PLAYER_LOGIN" then
         -- Initialise saved variables
-        EasyFishingDB = EasyFishingDB or {}
-        for k, v in pairs(DB_DEFAULTS) do
-            if EasyFishingDB[k] == nil then
-                EasyFishingDB[k] = v
-            end
-        end
+        EF.InitializeSettings()
         EF.InitializeCharacterDB()
         local characterDB = EF.GetCharacterDB()
         EF.SetDoubleClickDelay(EasyFishingDB.doubleClickDelay)
@@ -184,60 +327,122 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         -- ------------------------------------------------------------------
         -- Options panel
         -- ------------------------------------------------------------------
-        local panel = CreateFrame("Frame", "EasyFishingOptionsPanel", UIParent)
-        panel.name  = "EasyFishing: Forever"
+        local OpenOptions
 
-        local settingsPage = CreateFrame("Frame", nil, panel)
-        settingsPage:SetAllPoints(panel)
+        local window = CreateFrame("Frame", "EasyFishingWindow", UIParent, "BackdropTemplate")
+        window:SetSize(680, 640)
+        window:SetFrameStrata("HIGH")
+        window:SetClampedToScreen(true)
+        window:SetMovable(true)
+        window:EnableMouse(true)
+        ApplyDialogStyle(window)
+        window:SetPoint("CENTER", UIParent, "CENTER",
+            tonumber(characterDB.windowX) or 0, tonumber(characterDB.windowY) or 0)
+        local function UpdateWindowScale()
+            local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+            if width > 0 and height > 0 then window:SetScale(math.min(1, width / 700, height / 660)) end
+        end
+        UpdateWindowScale()
+        window:RegisterEvent("DISPLAY_SIZE_CHANGED")
+        window:RegisterEvent("UI_SCALE_CHANGED")
+        window:SetScript("OnEvent", UpdateWindowScale)
+        window:HookScript("OnShow", UpdateWindowScale)
+        window:Hide()
+        table.insert(UISpecialFrames, "EasyFishingWindow")
 
-        local statisticsPage = CreateFrame("Frame", nil, panel)
-        statisticsPage:SetAllPoints(panel)
+        local titleBar = CreateFrame("Frame", nil, window)
+        titleBar:SetPoint("TOPLEFT", 8, -8)
+        titleBar:SetPoint("TOPRIGHT", -180, -8)
+        titleBar:SetHeight(32)
+        titleBar:EnableMouse(true)
+        titleBar:RegisterForDrag("LeftButton")
+        titleBar:SetScript("OnDragStart", function() window:StartMoving() end)
+        titleBar:SetScript("OnDragStop", function()
+            window:StopMovingOrSizing()
+            local centerX, centerY = window:GetCenter()
+            local scale = window:GetScale()
+            characterDB.windowX = centerX - UIParent:GetWidth() / (2 * scale)
+            characterDB.windowY = centerY - UIParent:GetHeight() / (2 * scale)
+            window:ClearAllPoints()
+            window:SetPoint("CENTER", UIParent, "CENTER", characterDB.windowX, characterDB.windowY)
+        end)
+        local windowIcon = titleBar:CreateTexture(nil, "ARTWORK")
+        windowIcon:SetSize(28, 28)
+        windowIcon:SetPoint("LEFT", 6, 0)
+        windowIcon:SetTexture("Interface\\AddOns\\" .. addonName .. "\\EasyFishing.tga")
+        local windowTitle = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        windowTitle:SetPoint("LEFT", windowIcon, "RIGHT", 10, 0)
+        windowTitle:SetText("EasyFishing: Forever")
+
+        local closeWindow = CreateFrame("Button", nil, window, "UIPanelCloseButton")
+        closeWindow:SetPoint("TOPRIGHT", -4, -4)
+        closeWindow:SetScript("OnClick", function() window:Hide() end)
+        local optionsButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+        optionsButton:SetSize(90, 24)
+        optionsButton:SetPoint("TOPRIGHT", -42, -12)
+        optionsButton:SetText("Options")
+        optionsButton:SetScript("OnClick", function() OpenOptions("settings") end)
+
+        local optionsPanelContainer = InterfaceOptionsFramePanelContainer or UIParent
+        local splashPage = CreateOptionsSplash(optionsPanelContainer, function() OpenOptions("settings") end)
+        local settingsPage = CreateFrame("Frame", nil, optionsPanelContainer)
+        settingsPage:Hide()
+
+        local statisticsPage = CreateFrame("Frame", nil, window)
         statisticsPage:Hide()
 
-        local locationsPage = CreateFrame("Frame", nil, panel)
-        locationsPage:SetAllPoints(panel)
+        local locationsPage = CreateFrame("Frame", nil, window)
         locationsPage:Hide()
 
-        local guidePage = CreateFrame("Frame", nil, panel)
-        guidePage:SetAllPoints(panel)
+        local guidePage = CreateFrame("Frame", nil, window)
         guidePage:Hide()
 
-        local guideTab = CreateFrame("Button", "EasyFishingOptionsGuideTab", panel, "PanelTopTabButtonTemplate")
-        guideTab:SetSize(86, 32)
-        guideTab:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -366, -10)
-        guideTab:SetText("Guide")
+        local guideTrainersPage = CreateFrame("Frame", nil, window)
+        guideTrainersPage:Hide()
 
-        local locationsTab = CreateFrame("Button", "EasyFishingOptionsLocationsTab", panel, "PanelTopTabButtonTemplate")
-        locationsTab:SetSize(86, 32)
-        locationsTab:SetPoint("LEFT", guideTab, "RIGHT", 4, 0)
-        locationsTab:SetText("Locations")
+        local guideGearPage = CreateFrame("Frame", nil, window)
+        guideGearPage:Hide()
+        local journalPage = EF.CreateJournalPage(window)
 
-        local statisticsTab = CreateFrame("Button", "EasyFishingOptionsStatisticsTab", panel, "PanelTopTabButtonTemplate")
-        statisticsTab:SetSize(86, 32)
-        statisticsTab:SetPoint("LEFT", locationsTab, "RIGHT", 4, 0)
-        statisticsTab:SetText("Statistics")
-
-        local settingsTab = CreateFrame("Button", "EasyFishingOptionsSettingsTab", panel, "PanelTopTabButtonTemplate")
-        settingsTab:SetSize(86, 32)
-        settingsTab:SetPoint("LEFT", statisticsTab, "RIGHT", 4, 0)
-        settingsTab:SetText("Settings")
-        local optionPageTabs = {
-            settings = settingsTab,
-            stats = statisticsTab,
-            atlas = locationsTab,
-            guide = guideTab,
+        local windowPages = {
+            { key = "atlas", label = "Locations", frame = locationsPage },
+            { key = "guide", label = "Training", frame = guidePage },
+            { key = "npcs", label = "NPCs", frame = guideTrainersPage },
+            { key = "gear", label = "Gear & Rewards", frame = guideGearPage },
+            { key = "stats", label = "Statistics", frame = statisticsPage },
+            { key = "journal", label = "Journal", frame = journalPage },
         }
-        local function SelectOptionsPageTab(pageName)
-            for name, tab in pairs(optionPageTabs) do
-                local isSelected = name == pageName
-                if isSelected then
-                    PanelTemplates_SelectTab(tab)
-                else
-                    PanelTemplates_DeselectTab(tab)
-                end
+        local selectedPage = "atlas"
+        local function OpenFishingWindow(pageName)
+            if pageName == "home" then pageName = selectedPage end
+            for _, entry in ipairs(windowPages) do
+                if entry.key == pageName then selectedPage = pageName end
+            end
+            local optionsFrame = SettingsPanel or InterfaceOptionsFrame
+            if optionsFrame and optionsFrame:IsShown() then
+                if HideUIPanel then HideUIPanel(optionsFrame) else optionsFrame:Hide() end
+            end
+            window:Show()
+            window:Raise()
+            for _, entry in ipairs(windowPages) do
+                entry.frame:SetShown(entry.key == selectedPage)
+                entry.button:SetEnabled(entry.key ~= selectedPage)
             end
         end
-        SelectOptionsPageTab("settings")
+        for index, entry in ipairs(windowPages) do
+            entry.frame:SetPoint("TOPLEFT", window, "TOPLEFT", 4, -78)
+            entry.frame:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -4, 8)
+            local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+            button:SetSize(102, 26)
+            button:SetDisabledFontObject("GameFontNormal")
+            button:GetFontString():SetWidth(90)
+            button:GetFontString():SetWordWrap(false)
+            button:SetPoint("TOPLEFT", window, "TOPLEFT", 18 + (index - 1) * 106, -48)
+            button:SetText(entry.label)
+            button:SetScript("OnClick", function() OpenFishingWindow(entry.key) end)
+            entry.button = button
+        end
+        EF.OpenWindow = OpenFishingWindow
 
         local PAGE_CONTENT_WIDTH = 620
 
@@ -247,7 +452,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             title:SetText(text)
 
             local rule = page:CreateTexture(nil, "ARTWORK")
-            rule:SetColorTexture(0.42, 0.34, 0.17, 0.6)
+            SetTextureColor(rule, UI_COLORS.divider)
             rule:SetSize(PAGE_CONTENT_WIDTH, 1)
             rule:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
             return rule
@@ -256,11 +461,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local function ContentHeading(parent, text, anchor, relativePoint, xOffset, yOffset, width)
             local heading = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
             heading:SetPoint("TOPLEFT", anchor, relativePoint, xOffset, yOffset)
-            heading:SetTextColor(1, 0.82, 0)
+            SetFontColor(heading, UI_COLORS.accent)
             heading:SetText(text)
 
             local rule = parent:CreateTexture(nil, "ARTWORK")
-            rule:SetColorTexture(0.42, 0.34, 0.17, 0.6)
+            SetTextureColor(rule, UI_COLORS.divider)
             rule:SetSize(width, 1)
             rule:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -3)
             return heading
@@ -269,7 +474,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local function UpdateScrollBarVisibility(scrollFrame)
             local scrollBar = scrollFrame.ScrollBar
             if not scrollBar and scrollFrame.GetName then
-                scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+                local name = scrollFrame:GetName()
+                scrollBar = name and _G[name .. "ScrollBar"]
             end
             if not scrollBar then return end
 
@@ -280,12 +486,18 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
 
-        local divider = PageHeader(settingsPage, "EasyFishing: Forever")
+        local divider = PageHeader(settingsPage, "General Options")
+
+        local openWindowButton = CreateFrame("Button", nil, settingsPage, "UIPanelButtonTemplate")
+        openWindowButton:SetSize(142, 24)
+        openWindowButton:SetPoint("TOPRIGHT", settingsPage, "TOPRIGHT", -18, -12)
+        openWindowButton:SetText("Open EasyFishing")
+        openWindowButton:SetScript("OnClick", function() OpenFishingWindow("home") end)
 
         local function SectionHeader(text, anchor, yOff)
             local fs = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             fs:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOff)
-            fs:SetTextColor(1, 0.82, 0)
+            SetFontColor(fs, UI_COLORS.accent)
             fs:SetText(text)
             return fs
         end
@@ -293,16 +505,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local function RightSectionHeader(text, yOff)
             local fs = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             fs:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 300, yOff)
-            fs:SetTextColor(1, 0.82, 0)
+            SetFontColor(fs, UI_COLORS.accent)
             fs:SetText(text)
             return fs
         end
 
+        local optionCheckboxes = {}
         local function MakeCheckbox(label, desc, anchor, yOffset, dbKey)
             local cb = CreateFrame("CheckButton", "EasyFishingCB_" .. dbKey,
             settingsPage, "InterfaceOptionsCheckButtonTemplate")
             cb:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOffset)
             cb.Text:SetText(label)
+            cb.Text:SetWidth(260)
+            cb.Text:SetWordWrap(false)
+            optionCheckboxes[dbKey] = cb
             if desc then
                 cb:SetScript("OnEnter", function(me)
                     GameTooltip:SetOwner(me, "ANCHOR_RIGHT")
@@ -325,6 +541,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     EF.UpdateAutoInteractSetting()
                 elseif dbKey == "showFishWatcher" then
                     EF.UpdateFishWatcher()
+                elseif dbKey == "enableSound" then
+                    EF.UpdateFishingSoundSettings()
+                elseif dbKey == "showFishingControls" then
+                    EF.UpdateFishingControls()
+                elseif dbKey == "showMinimapButton" then
+                    EF.UpdateMinimapButton()
+                elseif dbKey == "enableAutoLure" or dbKey == "preferStrongestLure" then
+                    ClearBinding()
+                    EF.UpdateKeyboardCastAction()
                 end
             end)
             return cb
@@ -374,7 +599,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local btnLabel = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         btnLabel:SetPoint("TOPLEFT", modeDropdown, "BOTTOMLEFT", 16, -10)
         btnLabel:SetText("Cast Mouse Button")
-        btnLabel:SetScript("OnEnter", function(self)
+        local dropdown = CreateFrame("Frame", "EasyFishingButtonDropdown",
+            settingsPage, "UIDropDownMenuTemplate")
+        dropdown:SetPoint("TOPLEFT", btnLabel, "BOTTOMLEFT", -16, -4)
+        UIDropDownMenu_SetWidth(dropdown, 150)
+        UIDropDownMenu_SetText(dropdown, GetButtonOption(EasyFishingDB.doubleClickButton).label)
+        dropdown:EnableMouse(true)
+        dropdown:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Right-click casting")
             GameTooltip:AddLine(
@@ -382,13 +613,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 1, 1, 1, true)
             GameTooltip:Show()
         end)
-        btnLabel:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        local dropdown = CreateFrame("Frame", "EasyFishingButtonDropdown",
-            settingsPage, "UIDropDownMenuTemplate")
-        dropdown:SetPoint("TOPLEFT", btnLabel, "BOTTOMLEFT", -16, -4)
-        UIDropDownMenu_SetWidth(dropdown, 150)
-        UIDropDownMenu_SetText(dropdown, GetButtonOption(EasyFishingDB.doubleClickButton).label)
+        dropdown:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         UIDropDownMenu_Initialize(dropdown, function()
             for _, opt in ipairs(BUTTON_OPTIONS) do
@@ -427,7 +652,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         slider.High:SetText("0.8s")
         slider.Text:SetText(string.format("%.2fs", EasyFishingDB.doubleClickDelay))
         slider:SetScript("OnValueChanged", function(me, val)
-            local rounded = math.floor(val * 20 + 0.5) / 20
+            local rounded = math.max(0.1, math.min(0.8, math.floor(val * 20 + 0.5) / 20))
             EasyFishingDB.doubleClickDelay = rounded
             EF.SetDoubleClickDelay(rounded)
             me.Text:SetText(string.format("%.2fs", rounded))
@@ -485,10 +710,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local secSound = SectionHeader("Sound", cbDisableClickToMove, -10)
         local cbSound = MakeCheckbox(
             "Turn Sound On While Fishing",
-            "Turns on Sound Effects and Background Sound while you fish, then restores your previous settings.",
+            "Turns on game sound, Sound Effects, and Background Sound while you fish, then restores your previous settings.",
             secSound, -4, "enableSound")
 
-        local secOutfit = SectionHeader("Fishing Outfit", cbSound, -10)
+        local secDisplay = SectionHeader("Display", cbSound, -10)
+        local cbControls = MakeCheckbox("Show Fishing Controls", "Show the movable fishing controls and lure status.",
+            secDisplay, -4, "showFishingControls")
+        local cbMinimap = MakeCheckbox("Show Minimap Button", "Show the EasyFishing launcher beside the minimap.",
+            cbControls, -4, "showMinimapButton")
+        local secOutfit = SectionHeader("Fishing Outfit", cbMinimap, -10)
         local outfitHint = settingsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         outfitHint:SetPoint("TOPLEFT", secOutfit, "BOTTOMLEFT", 0, -4)
         outfitHint:SetWidth(260)
@@ -535,6 +765,24 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
         UIDropDownMenu_SetText(outfitDropdown, selectedOutfitName)
 
+        EF.RefreshOptions = function()
+            for key, checkbox in pairs(optionCheckboxes) do checkbox:SetChecked(EasyFishingDB[key]) end
+            UIDropDownMenu_SetText(modeDropdown, GetCastModeLabel(EasyFishingDB.castClickMode))
+            UIDropDownMenu_SetText(dropdown, GetButtonOption(EasyFishingDB.doubleClickButton).label)
+            slider:SetValue(EasyFishingDB.doubleClickDelay)
+            slider.Text:SetText(string.format("%.2fs", EasyFishingDB.doubleClickDelay))
+            UpdateSliderState(EasyFishingDB.enableDoubleClick and EasyFishingDB.castClickMode == "DoubleClick")
+            local name = "Select a gear set"
+            for _, setID in ipairs(GetEquipmentSetIDs()) do
+                if tonumber(characterDB.fishingOutfitSetID) == setID then
+                    name = C_EquipmentSet.GetEquipmentSetInfo(setID) or name
+                    break
+                end
+            end
+            UIDropDownMenu_SetText(outfitDropdown, name)
+        end
+        settingsPage:SetScript("OnShow", EF.RefreshOptions)
+
         local equipOutfitButton = CreateFrame("Button", nil, settingsPage, "UIPanelButtonTemplate")
         equipOutfitButton:SetSize(92, 22)
         equipOutfitButton:SetPoint("TOPLEFT", outfitDropdown, "BOTTOMLEFT", 16, -2)
@@ -569,19 +817,21 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             local value = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
             value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
             value:SetWidth(145)
+            value:SetWordWrap(false)
             value:SetJustifyH("LEFT")
             value:SetText("0")
             metricValues[index] = value
         end
 
         local statisticsSummaryRule = statisticsPage:CreateTexture(nil, "ARTWORK")
-        statisticsSummaryRule:SetColorTexture(0.42, 0.34, 0.17, 0.6)
+        SetTextureColor(statisticsSummaryRule, UI_COLORS.divider)
         statisticsSummaryRule:SetSize(PAGE_CONTENT_WIDTH, 1)
         statisticsSummaryRule:SetPoint("TOPLEFT", metricValues[1], "BOTTOMLEFT", 0, -4)
 
         local statisticsSummary = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         statisticsSummary:SetPoint("TOPLEFT", statisticsSummaryRule, "BOTTOMLEFT", 0, -4)
         statisticsSummary:SetWidth(PAGE_CONTENT_WIDTH)
+        statisticsSummary:SetWordWrap(true)
         statisticsSummary:SetJustifyH("CENTER")
 
         local statisticsCaveat = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -660,20 +910,21 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.value:SetPoint("TOPRIGHT", row, "TOPRIGHT", -2, -2)
             row.value:SetWidth(100)
             row.value:SetJustifyH("RIGHT")
-            row.value:SetTextColor(1, 0.82, 0)
+            SetFontColor(row.value, UI_COLORS.accent)
 
             row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
             row.detail:SetWidth(292)
             row.detail:SetJustifyH("LEFT")
+            row.detail:SetWordWrap(true)
 
             row.barBack = row:CreateTexture(nil, "BACKGROUND")
-            row.barBack:SetColorTexture(0.22, 0.19, 0.12, 0.65)
+            row.barBack:SetColorTexture(0.2, 0.2, 0.2, 0.65)
             row.barBack:SetSize(292, 3)
             row.barBack:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
 
             row.bar = row:CreateTexture(nil, "ARTWORK")
-            row.bar:SetColorTexture(0.85, 0.62, 0.18, 0.9)
+            SetTextureColor(row.bar, UI_COLORS.accent, 0.9)
             row.bar:SetSize(2, 3)
             row.bar:SetPoint("BOTTOMLEFT", row.barBack, "BOTTOMLEFT", 0, 0)
             return row
@@ -689,6 +940,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
             emptyText:Hide()
+            local yOffset = 0
             for index, entry in ipairs(entries) do
                 local row = rows[index]
                 if not row then
@@ -696,11 +948,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     rows[index] = row
                 end
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((index - 1) * 56))
-                row.background:SetColorTexture(0.55, 0.48, 0.3, index % 2 == 0 and 0.07 or 0.025)
+                row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -yOffset)
+                SetStripedRow(row.background, index)
                 row.name:SetText(entry.name)
                 row.value:SetText(formatValue(entry))
                 row.detail:SetText(formatDetail(entry))
+                row:SetHeight(math.max(48, row.detail:GetStringHeight() + 28))
+                yOffset = yOffset + row:GetHeight() + 8
                 row.bar:SetWidth(math.max(2, 292 * entry.count / math.max(1, maxCount)))
                 row:Show()
             end
@@ -710,7 +964,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             if moreCount > 0 then
                 moreText:SetText(string.format("+ %d more", moreCount))
                 moreText:ClearAllPoints()
-                moreText:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -(#entries * 56))
+                moreText:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -yOffset)
                 moreText:Show()
             else
                 moreText:Hide()
@@ -719,13 +973,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local function RefreshStatisticsPage()
             local stats = EF.EnsureFishingStats()
+            local activeZone, activeSeconds = EF.GetFishingSessionTime()
+            local totalSeconds = stats.totalFishingSeconds + activeSeconds
             local zoneCount = 0
             for _ in pairs(stats.zones) do
                 zoneCount = zoneCount + 1
             end
             metricValues[1]:SetText(tostring(stats.totalItems))
             metricValues[2]:SetText(tostring(stats.totalCasts))
-            metricValues[3]:SetText(EF.FormatFishingTime(stats.totalFishingSeconds))
+            metricValues[3]:SetText(EF.FormatFishingTime(totalSeconds))
             metricValues[4]:SetText(tostring(stats.totalSkillUps))
             local catchRate = stats.rateTrackedCasts > 0
                 and string.format("%.1f%% catch rate", math.min(100,
@@ -734,7 +990,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             statisticsSummary:SetText(string.format(
                 "Lifetime: %d sessions  |  %d %s  |  %.1f items per hour  |  %s",
                 stats.totalSessions, zoneCount, zoneCount == 1 and "zone" or "zones",
-                stats.totalFishingSeconds > 0 and stats.totalItems * 3600 / stats.totalFishingSeconds or 0,
+                totalSeconds > 0 and stats.totalItems * 3600 / totalSeconds or 0,
                 catchRate))
             local zoneEntries, moreZones = BuildStatsEntries(stats.zones, 5)
             RenderStatisticsRows(zoneStatsList, zoneStatsRows, zoneStatsEmpty, zoneStatsMore,
@@ -751,7 +1007,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                         or ""
                     return string.format("%d sessions  |  %d casts  |  %s%s",
                         tonumber(zone.sessions) or 0, tonumber(zone.casts) or 0,
-                        EF.FormatFishingTime(tonumber(zone.fishingSeconds) or 0), zoneCatchRate)
+                        EF.FormatFishingTime((tonumber(zone.fishingSeconds) or 0)
+                            + (entry.name == activeZone and activeSeconds or 0)), zoneCatchRate)
                 end)
 
             local itemEntries, moreItems = BuildStatsEntries(stats.itemsByID, 5)
@@ -770,15 +1027,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local locationsDescription = locationsPage:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         locationsDescription:SetPoint("TOPLEFT", locationsDivider, "BOTTOMLEFT", 0, -14)
-        locationsDescription:SetWidth(210)
+        locationsDescription:SetWidth(PAGE_CONTENT_WIDTH)
         locationsDescription:SetJustifyH("LEFT")
-        locationsDescription:SetWordWrap(true)
-        locationsDescription:SetText("Your recorded fishing locations, grouped by area. Expand an area to see each location, then click one to set a map waypoint.")
+        locationsDescription:SetWordWrap(false)
+        locationsDescription:SetText("No fishing locations recorded yet.")
 
         local atlasZoneFilter = "All zones"
         local atlasZoneDropdown = CreateFrame("Frame", "EasyFishingAtlasZoneDropdown",
             locationsPage, "UIDropDownMenuTemplate")
-        atlasZoneDropdown:SetPoint("TOPRIGHT", locationsDivider, "BOTTOMRIGHT", 16, -8)
+        atlasZoneDropdown:SetPoint("TOPRIGHT", locationsDivider, "BOTTOMRIGHT", 0, -32)
         UIDropDownMenu_SetWidth(atlasZoneDropdown, 145)
         UIDropDownMenu_SetText(atlasZoneDropdown, atlasZoneFilter)
 
@@ -822,7 +1079,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
         local function ExportFishingLocations()
-            local lines = { "EFS2" }
+            local lines = { "EFS3" }
             local recordCount = 0
             local stats = EF.EnsureFishingStats()
             local zoneNames = {}
@@ -862,6 +1119,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                                 math.max(0, math.floor(tonumber(buckets[1]) or 0)),
                                 math.max(0, math.floor(tonumber(buckets[2]) or 0)),
                                 math.max(0, math.floor(tonumber(buckets[3]) or 0)),
+                                EncodeCatchDates(item),
                             }, ":"))
                         end
                         table.insert(lines, table.concat({
@@ -890,14 +1148,16 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
             local imported = {}
             local lineNumber = 0
+            local version
             for line in (text .. "\n"):gmatch("(.-)\n") do
                 line = line:gsub("\r$", "")
                 if line ~= "" then
                     lineNumber = lineNumber + 1
                     if lineNumber == 1 then
-                        if line ~= "EFS2" then
+                        if line ~= "EFS2" and line ~= "EFS3" then
                             return nil, "This is not a supported EasyFishing spots export."
                         end
+                        version = line
                     else
                         if lineNumber > 2001 then
                             return nil, "The export contains too many locations."
@@ -912,7 +1172,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                         local subzone = DecodeTransferField(fields[5])
                         local label = DecodeTransferField(fields[6])
                         if zoneName == "" or #zoneName > 255 or #subzone > 255
-                            or #label > 48
+                            or LabelLength(label) > 48
                             or not mapID or mapID < 1 or mapID > 50000 or mapID ~= math.floor(mapID)
                             or not x or not y or x ~= x or y ~= y
                             or x < 0 or x > 1 or y < 0 or y > 1
@@ -943,7 +1203,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                             for value in (encodedItem .. ":"):gmatch("(.-):") do
                                 table.insert(values, value)
                             end
-                            if #values ~= 6 then
+                            if #values ~= (version == "EFS3" and 7 or 6) then
                                 return nil, "Invalid fish data on line " .. lineNumber .. "."
                             end
                             local itemID = tonumber(values[1])
@@ -966,10 +1226,18 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                                 end
                                 timeBuckets[bucket] = bucketCount
                             end
+                            local datesByDay = {}
+                            if version == "EFS3" then
+                                datesByDay = DecodeCatchDates(values[7], count)
+                                if not datesByDay then
+                                    return nil, "Invalid date data on line " .. lineNumber .. "."
+                                end
+                            end
                             spot.itemsByID[tostring(itemID)] = {
                                 name = GetItemInfo(itemID) or ("Item " .. itemID),
                                 count = count,
                                 timeBuckets = timeBuckets,
+                                datesByDay = datesByDay,
                             }
                             spot.totalItems = spot.totalItems + count
                         end
@@ -995,10 +1263,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             for _, entry in ipairs(imported) do
                 local zone = EF.EnsureZoneFishingStats(stats, entry.zone)
                 local spot = entry.spot
-                local cellX = math.min(199, math.max(0, math.floor(spot.x * 200)))
-                local cellY = math.min(199, math.max(0, math.floor(spot.y * 200)))
-                local spotKey = string.format("%d:%d:%d", spot.mapID, cellX, cellY)
-                local existing = zone.spots[spotKey]
+                local spotKey, existing, continentID, worldX, worldY = EF.FindFishingSpot(
+                    zone, spot.mapID, spot.x, spot.y)
+                spot.continentID, spot.worldX, spot.worldY = continentID, worldX, worldY
                 if type(existing) ~= "table" then
                     zone.spots[spotKey] = spot
                     added = added + 1
@@ -1022,6 +1289,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                                     tonumber(current.timeBuckets[bucket]) or 0,
                                     item.timeBuckets[bucket])
                             end
+                            current.datesByDay = type(current.datesByDay) == "table" and current.datesByDay or {}
+                            for day, count in pairs(item.datesByDay or {}) do
+                                current.datesByDay[day] = math.max(tonumber(current.datesByDay[day]) or 0, count)
+                            end
+                            local datedCount = 0
+                            for _, count in pairs(current.datesByDay) do datedCount = datedCount + count end
+                            current.count = math.max(current.count, datedCount)
                         end
                     end
                     existing.totalItems = 0
@@ -1034,8 +1308,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             return added, merged
         end
 
-        local transferFrame = CreateFrame("Frame", "EasyFishingLocationTransfer", UIParent, "BackdropTemplate")
-        transferFrame:SetSize(560, 430)
+        local transferFrame = CreateFrame("Frame", "EasyFishingLocationTransfer", window, "BackdropTemplate")
+        transferFrame:SetSize(560, 460)
         transferFrame:SetPoint("CENTER")
         transferFrame:SetFrameStrata("DIALOG")
         transferFrame:SetClampedToScreen(true)
@@ -1044,17 +1318,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         transferFrame:RegisterForDrag("LeftButton")
         transferFrame:SetScript("OnDragStart", transferFrame.StartMoving)
         transferFrame:SetScript("OnDragStop", transferFrame.StopMovingOrSizing)
-        transferFrame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true,
-            tileSize = 16,
-            edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        transferFrame:SetBackdropColor(0.02, 0.025, 0.025, 0.96)
-        transferFrame:SetBackdropBorderColor(0.48, 0.38, 0.2, 1)
+        ApplyDialogStyle(transferFrame)
         transferFrame:Hide()
+        table.insert(UISpecialFrames, "EasyFishingLocationTransfer")
+        window:HookScript("OnHide", function() transferFrame:Hide() end)
+        window:HookScript("OnHide", function() window:StopMovingOrSizing() end)
 
         local transferTitle = transferFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         transferTitle:SetPoint("TOPLEFT", transferFrame, "TOPLEFT", 18, -16)
@@ -1064,6 +1332,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         transferHelp:SetPoint("TOPLEFT", transferTitle, "BOTTOMLEFT", 0, -8)
         transferHelp:SetWidth(510)
         transferHelp:SetJustifyH("LEFT")
+        transferHelp:SetWordWrap(true)
         transferHelp:SetText("Export to copy your saved spots. Paste a versioned export here and import it; matching locations merge without double-counting.")
 
         local transferClose = CreateFrame("Button", nil, transferFrame, "UIPanelCloseButton")
@@ -1072,7 +1341,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local transferScroll = CreateFrame("ScrollFrame", nil, transferFrame, "UIPanelScrollFrameTemplate")
         transferScroll:SetPoint("TOPLEFT", transferHelp, "BOTTOMLEFT", 0, -10)
-        transferScroll:SetSize(520, 300)
+        transferScroll:SetPoint("BOTTOMRIGHT", transferFrame, "BOTTOMRIGHT", -34, 84)
         local transferEditBox = CreateFrame("EditBox", nil, transferScroll)
         transferEditBox:SetMultiLine(true)
         transferEditBox:SetAutoFocus(false)
@@ -1093,8 +1362,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         transferScroll:SetScrollChild(transferEditBox)
 
         local transferStatus = transferFrame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        transferStatus:SetPoint("BOTTOMLEFT", transferFrame, "BOTTOMLEFT", 18, 19)
-        transferStatus:SetWidth(310)
+        transferStatus:SetPoint("BOTTOMLEFT", transferFrame, "BOTTOMLEFT", 18, 48)
+        transferStatus:SetSize(524, 28)
+        transferStatus:SetWordWrap(true)
         transferStatus:SetJustifyH("LEFT")
 
         local exportSpotsButton = CreateFrame("Button", nil, transferFrame, "UIPanelButtonTemplate")
@@ -1136,6 +1406,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         OpenLocationTransfer = function()
             transferFrame:Show()
             transferEditBox:SetText("")
+            transferScroll:SetVerticalScroll(0)
             transferStatus:SetText("Export to copy locations, or paste an export and import it.")
             transferEditBox:SetFocus()
         end
@@ -1151,6 +1422,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         locationSearch:SetSize(134, 20)
         locationSearch:SetPoint("RIGHT", spotTransferButton, "LEFT", -6, 0)
         locationSearch:SetAutoFocus(false)
+        locationSearch:SetMaxLetters(80)
+        locationSearch:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         locationSearch:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Search fishing locations")
@@ -1177,18 +1450,28 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             hideOnEscape = true,
             preferredIndex = 3,
             OnShow = function(self)
-                self.editBox:SetText(self.data.spot.label or "")
-                self.editBox:SetFocus()
-                self.editBox:HighlightText()
+                local editBox = PopupEditBox(self)
+                if not editBox or not self.data or not self.data.spot then return end
+                editBox:SetText(self.data.spot.label or "")
+                editBox:SetFocus()
+                editBox:HighlightText()
             end,
             OnAccept = function(self)
                 if not self.data or not self.data.spot then return end
-                local label = self.editBox:GetText():match("^%s*(.-)%s*$")
+                local editBox = PopupEditBox(self)
+                if not editBox then return end
+                local label = editBox:GetText():match("^%s*(.-)%s*$")
                 self.data.spot.label = label ~= "" and label or nil
                 RefreshLocationsPage(self.data.scroll)
             end,
             EditBoxOnEnterPressed = function(self)
-                StaticPopup_OnClick(self:GetParent(), 1)
+                local dialog = self:GetParent()
+                if StaticPopup_OnClick then
+                    StaticPopup_OnClick(dialog, 1)
+                else
+                    local button = dialog.Button1 or dialog.button1
+                    if button then button:Click() end
+                end
             end,
         }
         local function SpotMatchesSearch(zoneName, spot)
@@ -1284,7 +1567,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 return
             end
             locationsDescription:SetText(string.format(
-                "Your catches grouped by area. Expand an area to view saved locations, then select one for a map waypoint. Showing %d areas and %d locations.",
+                "%d areas  |  %d locations",
                 #groups, #spots))
 
             local displayRows = {}
@@ -1358,8 +1641,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                         edgeSize = 10,
                         insets = { left = 3, right = 3, top = 3, bottom = 3 },
                     })
-                    row:SetBackdropColor(0.04, 0.05, 0.05, 0.72)
-                    row:SetBackdropBorderColor(0.24, 0.27, 0.27, 1)
+                    SetBackdropColors(row, UI_COLORS.spotBackground, UI_COLORS.spotBorder)
 
                     row.areaLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
                     row.areaLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -7)
@@ -1371,7 +1653,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.coordinateLabel:SetWidth(100)
                     row.coordinateLabel:SetPoint("TOPRIGHT", row, "TOPRIGHT", -36, -8)
                     row.coordinateLabel:SetJustifyH("RIGHT")
-                    row.coordinateLabel:SetTextColor(0.72, 0.76, 0.76)
+                    SetFontColor(row.coordinateLabel, UI_COLORS.muted)
 
                     row.favoriteButton = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
                     row.favoriteButton:SetSize(22, 22)
@@ -1403,8 +1685,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.coordinateLabel:SetText((expandedAreas[group.key] and "- " or "+ ")
                         .. #group.spots .. " locations")
                     row.catchLabel:SetText(string.format("%d items recorded", group.totalItems))
-                    row:SetBackdropColor(0.08, 0.07, 0.04, 0.82)
-                    row:SetBackdropBorderColor(0.42, 0.34, 0.16, 1)
+                    SetBackdropColors(row, UI_COLORS.areaBackground, UI_COLORS.areaBorder)
                 else
                     row.favoriteButton:SetChecked(not not spot.favorite)
                     row.favoriteButton:SetScript("OnClick", function(button)
@@ -1415,8 +1696,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.areaLabel:SetText(spot.label or (entry.index and ("Location " .. entry.index) or areaLabel))
                     row.coordinateLabel:SetText(string.format("%.1f, %.1f", spot.x * 100, spot.y * 100))
                     row.catchLabel:SetText(#fishSummary > 0 and table.concat(fishSummary, "  |  ") or "No item counts")
-                    row:SetBackdropColor(0.04, 0.05, 0.05, 0.72)
-                    row:SetBackdropBorderColor(0.24, 0.27, 0.27, 1)
+                    SetBackdropColors(row, UI_COLORS.spotBackground, UI_COLORS.spotBorder)
                 end
                 row:SetScript("OnClick", function(_, button)
                     if entry.kind == "spot" and button == "RightButton" then
@@ -1462,8 +1742,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     end
                 end)
                 row:SetScript("OnEnter", function(self)
-                    self:SetBackdropColor(0.10, 0.12, 0.11, 0.9)
-                    self:SetBackdropBorderColor(0.78, 0.58, 0.18, 1)
+                    SetBackdropColors(self, UI_COLORS.spotHover, UI_COLORS.hoverBorder)
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                     if entry.kind == "area" then
                         GameTooltip:SetText(areaLabel)
@@ -1493,11 +1772,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end)
                 row:SetScript("OnLeave", function(self)
                     if entry.kind == "area" then
-                        self:SetBackdropColor(0.08, 0.07, 0.04, 0.82)
-                        self:SetBackdropBorderColor(0.42, 0.34, 0.16, 1)
+                        SetBackdropColors(self, UI_COLORS.areaBackground, UI_COLORS.areaBorder)
                     else
-                        self:SetBackdropColor(0.04, 0.05, 0.05, 0.72)
-                        self:SetBackdropBorderColor(0.24, 0.27, 0.27, 1)
+                        SetBackdropColors(self, UI_COLORS.spotBackground, UI_COLORS.spotBorder)
                     end
                     GameTooltip:Hide()
                 end)
@@ -1537,49 +1814,17 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         guideSkillText:SetJustifyH("LEFT")
         guideSkillText:SetWordWrap(true)
 
-        local guideTrainingTab = CreateFrame("Button", nil, guidePage, "UIPanelButtonTemplate")
-        guideTrainingTab:SetSize(112, 22)
-        guideTrainingTab:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 0, -12)
-        guideTrainingTab:SetText("Training")
-
-        local guideTrainersTab = CreateFrame("Button", nil, guidePage, "UIPanelButtonTemplate")
-        guideTrainersTab:SetSize(128, 22)
-        guideTrainersTab:SetPoint("LEFT", guideTrainingTab, "RIGHT", 6, 0)
-        guideTrainersTab:SetText("Fishing NPCs")
-
-        local guideGearTab = CreateFrame("Button", nil, guidePage, "UIPanelButtonTemplate")
-        guideGearTab:SetSize(132, 22)
-        guideGearTab:SetPoint("LEFT", guideTrainersTab, "RIGHT", 6, 0)
-        guideGearTab:SetText("Gear & Rewards")
-
-        local guideTrainingIndicator = guidePage:CreateTexture(nil, "ARTWORK")
-        guideTrainingIndicator:SetColorTexture(1, 0.82, 0, 0.9)
-        guideTrainingIndicator:SetSize(100, 2)
-        guideTrainingIndicator:SetPoint("BOTTOMLEFT", guideTrainingTab, "BOTTOMLEFT", 6, 2)
-
-        local guideTrainersIndicator = guidePage:CreateTexture(nil, "ARTWORK")
-        guideTrainersIndicator:SetColorTexture(1, 0.82, 0, 0.9)
-        guideTrainersIndicator:SetSize(116, 2)
-        guideTrainersIndicator:SetPoint("BOTTOMLEFT", guideTrainersTab, "BOTTOMLEFT", 6, 2)
-        guideTrainersIndicator:Hide()
-
-        local guideGearIndicator = guidePage:CreateTexture(nil, "ARTWORK")
-        guideGearIndicator:SetColorTexture(1, 0.82, 0, 0.9)
-        guideGearIndicator:SetSize(120, 2)
-        guideGearIndicator:SetPoint("BOTTOMLEFT", guideGearTab, "BOTTOMLEFT", 6, 2)
-        guideGearIndicator:Hide()
-
-        local guideTrainingView = CreateFrame("Frame", nil, guidePage)
-        guideTrainingView:SetPoint("TOPLEFT", guideTrainingTab, "BOTTOMLEFT", 0, -10)
+        local trainingScroll = CreateFrame("ScrollFrame", "EasyFishingTrainingScroll", guidePage, "UIPanelScrollFrameTemplate")
+        trainingScroll:SetPoint("TOPLEFT", guideSkillText, "BOTTOMLEFT", 0, -12)
+        trainingScroll:SetPoint("BOTTOMRIGHT", guidePage, "BOTTOMRIGHT", -36, 60)
+        local guideTrainingView = CreateFrame("Frame", nil, trainingScroll)
         guideTrainingView:SetSize(PAGE_CONTENT_WIDTH, 380)
+        trainingScroll:SetScrollChild(guideTrainingView)
 
-        local guideTrainersView = CreateFrame("Frame", nil, guidePage)
-        guideTrainersView:SetAllPoints(guideTrainingView)
-        guideTrainersView:Hide()
-
-        local guideGearView = CreateFrame("Frame", nil, guidePage)
-        guideGearView:SetAllPoints(guideTrainingView)
-        guideGearView:Hide()
+        local guideTrainersDivider = PageHeader(guideTrainersPage, "Fishing NPCs")
+        local guideGearDivider = PageHeader(guideGearPage, "Gear & Rewards")
+        local guideTrainersView = guideTrainersPage
+        local guideGearView = guideGearPage
 
         local trainingTitle = ContentHeading(
             guideTrainingView, "Training and Leveling", guideTrainingView, "TOPLEFT", 0, 0, 300)
@@ -1643,17 +1888,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
             row.name:SetWidth(185)
             row.name:SetJustifyH("LEFT")
+            row.name:SetWordWrap(false)
             row.name:SetText(lure.name)
 
             row.count = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.count:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
             row.count:SetWidth(78)
             row.count:SetJustifyH("RIGHT")
+            row.count:SetWordWrap(false)
 
             row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
             row.detail:SetWidth(185)
             row.detail:SetJustifyH("LEFT")
+            row.detail:SetWordWrap(false)
             row.detail:SetText(string.format("+%d Fishing  |  Skill %d+", lure.bonus, lure.minimumSkill))
 
             row:SetScript("OnEnter", function(self)
@@ -1688,17 +1936,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
             row.name:SetWidth(185)
             row.name:SetJustifyH("LEFT")
+            row.name:SetWordWrap(false)
             row.name:SetText(campItem.name)
 
             row.count = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.count:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
             row.count:SetWidth(78)
             row.count:SetJustifyH("RIGHT")
+            row.count:SetWordWrap(false)
 
             row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
             row.detail:SetWidth(185)
             row.detail:SetJustifyH("LEFT")
+            row.detail:SetWordWrap(false)
             row.detail:SetText(string.format("Craft skill %d  |  %s", campItem.craftSkill, campItem.source))
 
             row:SetScript("OnEnter", function(self)
@@ -1716,11 +1967,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
         local gearTitle = ContentHeading(
-            guideGearView, "Fishing Skill Bonuses", guideGearView, "TOPLEFT", 0, 0, 300)
+            guideGearPage, "Fishing Skill Bonuses", guideGearDivider, "BOTTOMLEFT", 0, -14, 300)
 
         local gearRows = {}
         for index, boost in ipairs(EF.Data.FISHING_BOOSTS) do
-            local row = CreateFrame("Frame", nil, guideGearView)
+            local row = CreateFrame("Frame", nil, guideGearPage)
             row.boost = boost
             row:SetSize(300, 34)
             row:SetPoint("TOPLEFT", gearTitle, "BOTTOMLEFT", 0, -8 - ((index - 1) * 36))
@@ -1729,8 +1980,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetSize(24, 24)
             row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
-            local icon = boost.iconType == "spell"
-                and GetSpellIcon(boost.id) or GetItemTexture(boost.id)
+            local icon = GetReferenceIcon(boost)
             row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
 
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -1751,6 +2001,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
             row.detail:SetWidth(245)
             row.detail:SetJustifyH("LEFT")
+            row.detail:SetWordWrap(false)
             row.detail:SetText(string.format("Skill %d+  |  %s", boost.minimumSkill, boost.source))
 
             row:SetScript("OnEnter", function(self)
@@ -1766,7 +2017,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
         local rewardsTitle = ContentHeading(
-            guideGearView, "Find Fish and Quest Rewards", guideGearView, "TOPLEFT", 320, 0, 300)
+            guideGearPage, "Find Fish and Quest Rewards", guideGearDivider, "BOTTOMLEFT", 320, -14, 300)
 
         local findFish = EF.Data.FISHING_ABILITIES[1]
         local rewardEntries = {
@@ -1793,7 +2044,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
         local rewardScroll = CreateFrame("ScrollFrame", "EasyFishingQuestRewardsScroll",
-            guideGearView, "UIPanelScrollFrameTemplate")
+            guideGearPage, "UIPanelScrollFrameTemplate")
         rewardScroll:SetPoint("TOPLEFT", rewardsTitle, "BOTTOMLEFT", 0, -8)
         rewardScroll:SetSize(300, math.min(#rewardEntries, 9) * 36)
         local rewardContent = CreateFrame("Frame", nil, rewardScroll)
@@ -1802,7 +2053,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local rewardRows = {}
         for index, entry in ipairs(rewardEntries) do
-            local row = CreateFrame("Button", nil, rewardContent)
+            local row = CreateFrame(entry.kind == "ability" and "Button" or "Frame", nil, rewardContent)
             row:SetSize(278, 34)
             row:SetPoint("TOPLEFT", rewardContent, "TOPLEFT", 0, -((index - 1) * 36))
             row:EnableMouse(true)
@@ -1810,8 +2061,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetSize(24, 24)
             row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
-            local rewardIcon = entry.iconType == "spell"
-                and GetSpellIcon(entry.id) or GetItemTexture(entry.id)
+            local rewardIcon = GetReferenceIcon(entry)
             row.icon:SetTexture(rewardIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
 
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -1826,12 +2076,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.value:SetWidth(82)
             row.value:SetJustifyH("RIGHT")
             row.value:SetText(entry.value)
-            row.value:SetTextColor(1, 0.82, 0)
+            SetFontColor(row.value, UI_COLORS.accent)
 
             row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
             row.detail:SetWidth(244)
             row.detail:SetJustifyH("LEFT")
+            row.detail:SetWordWrap(false)
             row.detail:SetText(entry.detail)
 
             row:SetScript("OnEnter", function(self)
@@ -1839,7 +2090,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 if entry.kind == "ability" then
                     GameTooltip:SetText(entry.name)
                     GameTooltip:AddLine(entry.details, 1, 1, 1, true)
-                    GameTooltip:AddLine("Cooldown: " .. entry.value, 0.75, 0.75, 0.75)
+                    GameTooltip:AddLine("Cooldown: " .. findFish.cooldown, 0.75, 0.75, 0.75)
                     GameTooltip:AddLine("Click to open the spellbook.", 0.75, 0.75, 0.75)
                 else
                     GameTooltip:SetText(entry.quest.name)
@@ -1850,6 +2101,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end)
             row:SetScript("OnLeave", function() GameTooltip:Hide() end)
             if entry.kind == "ability" then
+                row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
                 row:SetScript("OnClick", function()
                     if type(ToggleSpellBook) == "function" then
                         ToggleSpellBook(BOOKTYPE_SPELL or "spell")
@@ -1868,13 +2120,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local trainerFilter = "All"
         local trainerIntro = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        trainerIntro:SetPoint("TOPLEFT", guideTrainersView, "TOPLEFT", 0, -4)
+        trainerIntro:SetPoint("TOPLEFT", guideTrainersDivider, "BOTTOMLEFT", 0, -14)
         trainerIntro:SetWidth(360)
         trainerIntro:SetJustifyH("LEFT")
 
         local trainerFactionDropdown = CreateFrame("Frame", "EasyFishingTrainerFactionDropdown",
             guideTrainersView, "UIDropDownMenuTemplate")
-        trainerFactionDropdown:SetPoint("TOPRIGHT", guideTrainersView, "TOPRIGHT", 16, 2)
+        trainerFactionDropdown:SetPoint("TOPRIGHT", guideTrainersDivider, "BOTTOMRIGHT", 0, -8)
         UIDropDownMenu_SetWidth(trainerFactionDropdown, 135)
         UIDropDownMenu_SetText(trainerFactionDropdown, "All factions")
 
@@ -2006,7 +2258,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
                 row:ClearAllPoints()
                 row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 40))
-                row.background:SetColorTexture(0.55, 0.48, 0.3, index % 2 == 0 and 0.07 or 0.025)
+                SetStripedRow(row.background, index)
                 row.name:SetText(trainer.name)
                 row.role:SetText(string.format("%s  |  Level %d", trainer.role, trainer.level))
                 row.side:SetText(trainer.side == "Both" and "Shared" or trainer.side)
@@ -2015,7 +2267,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 elseif trainer.side == "Horde" then
                     row.side:SetTextColor(1, 0.45, 0.35)
                 else
-                    row.side:SetTextColor(1, 0.82, 0)
+                    SetFontColor(row.side, UI_COLORS.accent)
                 end
                 row.location:SetText(trainer.location and trainer.location ~= ""
                     and trainer.location or trainer.zone)
@@ -2108,18 +2360,26 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end)
 
-        local guideSource = guidePage:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        guideSource:SetPoint("BOTTOMLEFT", guidePage, "BOTTOMLEFT", 16, 18)
-        guideSource:SetWidth(PAGE_CONTENT_WIDTH)
-        guideSource:SetJustifyH("LEFT")
-        guideSource:SetText("Source: Wowhead Forever Fishing and Camping guides, Patch 1.60.1. Trainer coordinates are zone-map estimates. Forever is in beta; routes and data may change.")
+        local function AddGuideSource(page)
+            local source = page:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+            source:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 16, 18)
+            source:SetWidth(PAGE_CONTENT_WIDTH)
+            source:SetJustifyH("LEFT")
+            source:SetWordWrap(true)
+            source:SetText("Source: Wowhead Forever Fishing and Camping guides, Patch 1.60.1. Trainer coordinates are zone-map estimates. Forever is in beta; routes and data may change.")
+        end
+        AddGuideSource(guidePage)
+        AddGuideSource(guideTrainersPage)
+        AddGuideSource(guideGearPage)
 
         local function RefreshForeverGuide()
-            local skill = GetFishingSkill()
+            local skill, maximumSkill = GetFishingSkill()
+            local currentRank
             if skill then
-                local currentRank
                 for _, row in ipairs(trainingRankRows) do
-                    if skill >= row.rank.minimumSkill
+                    local knownCap = maximumSkill and maximumSkill > 0
+                    if knownCap and maximumSkill == row.rank.maximumSkill
+                        or not knownCap and skill >= row.rank.minimumSkill
                         and (not row.rank.nextTraining or skill < row.rank.nextTraining) then
                         currentRank = row.rank
                         break
@@ -2127,7 +2387,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end
                 if currentRank then
                     local nextStep = currentRank.nextTraining
-                        and string.format("  |  Next rank at %d", currentRank.nextTraining)
+                        and (skill >= currentRank.maximumSkill and "  |  Rank cap reached"
+                            or string.format("  |  Next rank at %d", currentRank.nextTraining))
                         or (skill >= currentRank.maximumSkill and "  |  Skill cap reached" or "")
                     guideSkillText:SetText(string.format("Fishing skill: %d  |  %s (%s)%s",
                         skill, currentRank.name, currentRank.range, nextStep))
@@ -2141,8 +2402,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
             for _, row in ipairs(trainingRankRows) do
-                local isCurrent = skill and skill >= row.rank.minimumSkill
-                    and (not row.rank.nextTraining or skill < row.rank.nextTraining)
+                local isCurrent = currentRank == row.rank
                 local isComplete = skill and skill >= row.rank.maximumSkill and not isCurrent
                 local progress = skill and math.max(0, math.min(1,
                     (skill - row.rank.minimumSkill) / (row.rank.maximumSkill - row.rank.minimumSkill))) or 0
@@ -2152,7 +2412,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.title:SetTextColor(1, 0.82, 0)
                     row.range:SetTextColor(1, 0.82, 0)
                     row.detail:SetTextColor(1, 1, 1)
-                    row.status:SetText("CURRENT")
+                    row.status:SetText(skill >= row.rank.maximumSkill and row.rank.nextTraining and "AT CAP" or "CURRENT")
                     row.status:SetTextColor(1, 0.82, 0)
                     row.progress:SetColorTexture(0.96, 0.68, 0.14, 1)
                 elseif isComplete then
@@ -2171,8 +2431,19 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     row.progress:SetColorTexture(0.4, 0.34, 0.22, 0.55)
                 end
             end
+            local yOffset = 8
+            for _, row in ipairs(trainingRankRows) do
+                row:SetHeight(math.max(80, row.detail:GetStringHeight() + 28))
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -yOffset)
+                yOffset = yOffset + row:GetHeight() + 6
+            end
+            guideTrainingView:SetHeight(math.max(380, yOffset + 28))
+            trainingScroll:UpdateScrollChildRect()
+            UpdateScrollBarVisibility(trainingScroll)
 
             for _, row in ipairs(lureRows) do
+                row.icon:SetTexture(GetItemTexture(row.lure.id) or "Interface\\Icons\\INV_Misc_QuestionMark")
                 local count = GetOwnedItemCount(row.lure.id)
                 local usable = skill and skill >= row.lure.minimumSkill
                 row.itemCount = count
@@ -2191,6 +2462,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
             for _, row in ipairs(campRows) do
+                row.icon:SetTexture(GetItemTexture(row.campItem.id) or "Interface\\Icons\\INV_Misc_QuestionMark")
                 local count = GetOwnedItemCount(row.campItem.id)
                 row.itemCount = count
                 row.count:SetText(string.format("In bags: %d", count))
@@ -2204,142 +2476,103 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end
             end
 
+            for _, row in ipairs(gearRows) do
+                local boost = row.boost
+                local icon = GetReferenceIcon(boost)
+                row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+            end
+            for index, row in ipairs(rewardRows) do
+                local entry = rewardEntries[index]
+                local icon = GetReferenceIcon(entry)
+                row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+            end
+
         end
 
-        local function SelectGuideView(viewName)
-            local showTraining = viewName == "training"
-            local showTrainers = viewName == "npcs"
-            local showGear = viewName == "gear"
-
-            if showTraining then
-                guideTrainingView:Show()
-            else
-                guideTrainingView:Hide()
-            end
-            if showTrainers then
-                guideTrainersView:Show()
-            else
-                guideTrainersView:Hide()
-            end
-            if showGear then
-                guideGearView:Show()
-            else
-                guideGearView:Hide()
-            end
-
-            if showTrainers then
-                guideTrainingIndicator:Hide()
-                guideTrainersIndicator:Show()
-                guideGearIndicator:Hide()
-                guideTrainingTab:GetFontString():SetTextColor(1, 1, 1)
-                guideTrainersTab:GetFontString():SetTextColor(1, 0.82, 0)
-                guideGearTab:GetFontString():SetTextColor(1, 1, 1)
-            elseif showGear then
-                guideTrainingIndicator:Hide()
-                guideTrainersIndicator:Hide()
-                guideGearIndicator:Show()
-                guideTrainingTab:GetFontString():SetTextColor(1, 1, 1)
-                guideTrainersTab:GetFontString():SetTextColor(1, 1, 1)
-                guideGearTab:GetFontString():SetTextColor(1, 0.82, 0)
-            else
-                guideTrainingIndicator:Show()
-                guideTrainersIndicator:Hide()
-                guideGearIndicator:Hide()
-                guideTrainingTab:GetFontString():SetTextColor(1, 0.82, 0)
-                guideTrainersTab:GetFontString():SetTextColor(1, 1, 1)
-                guideGearTab:GetFontString():SetTextColor(1, 1, 1)
-            end
-        end
-
-        guideTrainingTab:SetScript("OnClick", function()
-            SelectGuideView("training")
-        end)
-        guideTrainersTab:SetScript("OnClick", function()
-            SelectGuideView("npcs")
-            RefreshTrainerList()
-        end)
-        guideGearTab:SetScript("OnClick", function()
-            SelectGuideView("gear")
-        end)
-        SelectGuideView("training")
         RefreshTrainerList()
 
-        settingsTab:SetScript("OnClick", function()
-            SelectOptionsPageTab("settings")
-            statisticsPage:Hide()
-            locationsPage:Hide()
-            guidePage:Hide()
-            settingsPage:Show()
+        statisticsPage:SetScript("OnShow", RefreshStatisticsPage)
+        statisticsPage:SetScript("OnUpdate", function(self, elapsed)
+            self.elapsed = (self.elapsed or 0) + elapsed
+            if self.elapsed >= 1 then self.elapsed = 0; RefreshStatisticsPage() end
         end)
-        statisticsTab:SetScript("OnClick", function()
-            SelectOptionsPageTab("stats")
-            settingsPage:Hide()
-            locationsPage:Hide()
-            guidePage:Hide()
-            RefreshStatisticsPage()
-            statisticsPage:Show()
-        end)
-        locationsTab:SetScript("OnClick", function()
-            SelectOptionsPageTab("atlas")
-            settingsPage:Hide()
-            statisticsPage:Hide()
-            guidePage:Hide()
+        locationsPage:SetScript("OnShow", function()
             RefreshLocationsPage()
-            locationsPage:Show()
         end)
-        guideTab:SetScript("OnClick", function()
-            SelectOptionsPageTab("guide")
-            settingsPage:Hide()
-            statisticsPage:Hide()
-            locationsPage:Hide()
-            RefreshForeverGuide()
-            guidePage:Show()
+        guidePage:SetScript("OnShow", RefreshForeverGuide)
+        guideTrainersPage:SetScript("OnShow", RefreshTrainerList)
+        guideGearPage:SetScript("OnShow", RefreshForeverGuide)
+
+        local refreshFrame = CreateFrame("Frame", "EasyFishingUIRefresh")
+        for _, event in ipairs({ "LOOT_READY", "LOOT_OPENED", "SKILL_LINES_CHANGED",
+            "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "EQUIPMENT_SETS_CHANGED", "PLAYER_EQUIPMENT_CHANGED" }) do
+            refreshFrame:RegisterEvent(event)
+        end
+        refreshFrame:SetScript("OnEvent", function()
+            if settingsPage:IsShown() then EF.RefreshOptions() end
+            if statisticsPage:IsShown() then RefreshStatisticsPage() end
+            if locationsPage:IsShown() then RefreshLocationsPage(locationsScroll:GetVerticalScroll()) end
+            if guidePage:IsShown() or guideGearPage:IsShown() then RefreshForeverGuide() end
         end)
 
         -- Register with the options UI --------------------------------------
         local settingsCategory
-        if Settings and Settings.RegisterCanvasLayoutCategory then
-            settingsCategory = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+        local optionCategories = {}
+        local optionFrames = {
+            splash = splashPage,
+            settings = settingsPage,
+            stats = statisticsPage,
+            atlas = locationsPage,
+            guide = guidePage,
+            npcs = guideTrainersPage,
+            gear = guideGearPage,
+            journal = journalPage,
+        }
+        if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterCanvasLayoutSubcategory
+            and Settings.RegisterAddOnCategory then
+            settingsCategory = Settings.RegisterCanvasLayoutCategory(splashPage, splashPage.name)
             Settings.RegisterAddOnCategory(settingsCategory)
+            optionCategories.splash = settingsCategory
+            optionCategories.settings = Settings.RegisterCanvasLayoutSubcategory(
+                settingsCategory, settingsPage, "General Options")
         elseif InterfaceOptions_AddCategory then
-            InterfaceOptions_AddCategory(panel)
+            InterfaceOptions_AddCategory(splashPage)
+            settingsPage.name = "General Options"
+            settingsPage.parent = splashPage.name
+            InterfaceOptions_AddCategory(settingsPage)
         end
 
-        local function OpenOptions()
-            if settingsCategory and Settings and Settings.OpenToCategory then
-                Settings.OpenToCategory(settingsCategory:GetID())
-            elseif InterfaceOptionsFrame_OpenToCategory then
-                InterfaceOptionsFrame_OpenToCategory(panel)
-                InterfaceOptionsFrame_OpenToCategory(panel)
+        OpenOptions = function(pageName)
+            if pageName ~= "settings" and pageName ~= "splash" then
+                OpenFishingWindow(pageName)
+                return
+            end
+            local category = optionCategories[pageName] or settingsCategory
+            if category and Settings and Settings.OpenToCategory then
+                local categoryID = category.GetID and category:GetID() or category.ID
+                if categoryID then
+                    window:Hide()
+                    Settings.OpenToCategory(categoryID)
+                    return
+                end
+            end
+
+            if InterfaceOptionsFrame_OpenToCategory then
+                local frame = pageName == "splash" and splashPage or settingsPage
+                window:Hide()
+                InterfaceOptionsFrame_OpenToCategory(frame)
+                InterfaceOptionsFrame_OpenToCategory(frame)
             else
                 print("EasyFishing: options panel is unavailable on this client.")
             end
         end
+        EF.OpenOptions = OpenOptions
 
         local function ShowOptionsPage(page)
-            OpenOptions()
-            if page == "stats" or page == "atlas" or page == "guide" then
-                SelectOptionsPageTab(page)
-            else
+            if page ~= "home" and not optionFrames[page] then
                 page = "settings"
-                SelectOptionsPageTab(page)
             end
-            settingsPage:Hide()
-            statisticsPage:Hide()
-            locationsPage:Hide()
-            guidePage:Hide()
-            if page == "stats" then
-                RefreshStatisticsPage()
-                statisticsPage:Show()
-            elseif page == "atlas" then
-                RefreshLocationsPage()
-                locationsPage:Show()
-            elseif page == "guide" then
-                RefreshForeverGuide()
-                guidePage:Show()
-            else
-                settingsPage:Show()
-            end
+            OpenOptions(page)
         end
 
         SLASH_EASYFISHING1 = "/ef"
@@ -2347,13 +2580,31 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         SlashCmdList.EASYFISHING = function(message)
             local command = (message or ""):lower():match("^%s*(.-)%s*$")
             if command == "" or command == "menu" then
-                ShowOptionsPage("guide")
+                ShowOptionsPage("home")
             elseif command == "stats" then
                 ShowOptionsPage("stats")
             elseif command == "atlas" or command == "locations" then
                 ShowOptionsPage("atlas")
             elseif command == "guide" then
                 ShowOptionsPage("guide")
+            elseif command == "npcs" or command == "trainers" then
+                ShowOptionsPage("npcs")
+            elseif command == "gear" then
+                ShowOptionsPage("gear")
+            elseif command == "journal" then
+                ShowOptionsPage("journal")
+            elseif command == "pause" then
+                EF.SetFishingPaused(true)
+            elseif command == "resume" then
+                EF.SetFishingPaused(false)
+            elseif command == "status" then
+                print("EasyFishing: " .. EF.GetMouseFishingStatus())
+                print("EasyFishing: " .. GetButtonOption(EasyFishingDB.doubleClickButton).label
+                    .. ", " .. EasyFishingDB.castClickMode .. ", delay " .. EasyFishingDB.doubleClickDelay .. "s.")
+            elseif command == "options" or command == "settings" then
+                ShowOptionsPage("settings")
+            elseif command == "about" then
+                ShowOptionsPage("splash")
             elseif command == "link fish" then
                 ShareLastFish()
             elseif command == "link location" then
@@ -2363,6 +2614,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             elseif command == "watch" then
                 EasyFishingDB.showFishWatcher = not EasyFishingDB.showFishWatcher
                 EF.UpdateFishWatcher()
+                EF.RefreshOptions()
                 print("EasyFishing: Fish Watcher " .. (EasyFishingDB.showFishWatcher and "shown" or "hidden") .. ".")
             elseif command == "equip" then
                 EquipFishingOutfit()
@@ -2371,7 +2623,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             elseif command == "toggle" then
                 ToggleFishingOutfit()
             else
-                print("EasyFishing commands: /ef [menu|stats|atlas|guide|watch|equip|restore|toggle|link fish|link location|link gear]")
+                print("EasyFishing commands: /ef [menu|about|options|status|stats|atlas|journal|guide|npcs|gear|pause|resume|watch|equip|restore|toggle|link fish|link location|link gear]")
             end
         end
 
@@ -2379,6 +2631,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         -- Global mouse handler
         -- ------------------------------------------------------------------
         EF.InitializeClickHandling()
+        EF.InitializeFishingTools()
     end
 end)
 

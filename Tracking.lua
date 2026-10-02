@@ -8,13 +8,15 @@ local GetCVarBG = EF.GetCVarBG
 local SetCVarBG = EF.SetCVarBG
 local GetCVarSound = EF.GetCVarSound
 local SetCVarSound = EF.SetCVarSound
+local GetCVarMasterSound = EF.GetCVarMasterSound
+local SetCVarMasterSound = EF.SetCVarMasterSound
 local isFishing = false
 
 local fishingSession = nil
 local fishingSessionEndTimer = nil
 
 local fishWatcher = CreateFrame("Frame", "EasyFishingFishWatcher", UIParent, "BackdropTemplate")
-fishWatcher:SetSize(360, 148)
+fishWatcher:SetSize(380, 260)
 fishWatcher:SetFrameStrata("MEDIUM")
 fishWatcher:SetClampedToScreen(true)
 fishWatcher:SetMovable(true)
@@ -29,72 +31,146 @@ if fishWatcher.SetBackdrop then
         tile = true, tileSize = 16, edgeSize = 12,
         insets = { left = 3, right = 3, top = 3, bottom = 3 },
     })
-    fishWatcher:SetBackdropColor(0.015, 0.02, 0.02, 0.9)
-    fishWatcher:SetBackdropBorderColor(0.45, 0.35, 0.16, 1)
+    fishWatcher:SetBackdropColor(0, 0, 0, 0.9)
+    fishWatcher:SetBackdropBorderColor(1, 1, 1, 1)
 end
 
-local fishWatcherTitle = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-fishWatcherTitle:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 10, -10)
+local fishWatcherIcon = fishWatcher:CreateTexture(nil, "ARTWORK")
+fishWatcherIcon:SetSize(16, 16)
+fishWatcherIcon:SetPoint("TOPLEFT", 12, -10)
+fishWatcherIcon:SetTexture("Interface\\Icons\\Trade_Fishing")
+local fishWatcherTitle = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+fishWatcherTitle:SetPoint("LEFT", fishWatcherIcon, "RIGHT", 6, 0)
 fishWatcherTitle:SetWidth(130)
 fishWatcherTitle:SetJustifyH("LEFT")
-fishWatcherTitle:SetText("FISH WATCHER")
+fishWatcherTitle:SetText("Fish Watcher")
+
+local fishWatcherStatus = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+fishWatcherStatus:SetPoint("TOPRIGHT", fishWatcher, "TOPRIGHT", -34, -12)
+fishWatcherStatus:SetWidth(130)
+fishWatcherStatus:SetJustifyH("RIGHT")
+local watcherClose = CreateFrame("Button", "EasyFishingWatcherClose", fishWatcher, "UIPanelCloseButton")
+watcherClose:SetSize(24, 24)
+watcherClose:SetPoint("TOPRIGHT", -4, -4)
+watcherClose:SetScript("OnClick", function()
+    EasyFishingDB.showFishWatcher = false
+    fishWatcher:Hide()
+    if EF.RefreshOptions then EF.RefreshOptions() end
+end)
+watcherClose:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Hide Fish Watcher")
+    GameTooltip:Show()
+end)
+watcherClose:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 local fishWatcherZone = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherZone:SetPoint("TOPRIGHT", fishWatcher, "TOPRIGHT", -10, -10)
-fishWatcherZone:SetWidth(210)
-fishWatcherZone:SetJustifyH("RIGHT")
+fishWatcherZone:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -32)
+fishWatcherZone:SetWidth(356)
+fishWatcherZone:SetJustifyH("LEFT")
 fishWatcherZone:SetWordWrap(false)
 
 local fishWatcherDivider = fishWatcher:CreateTexture(nil, "ARTWORK")
-fishWatcherDivider:SetColorTexture(0.45, 0.35, 0.16, 0.65)
-fishWatcherDivider:SetSize(340, 1)
-fishWatcherDivider:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 10, -29)
+fishWatcherDivider:SetColorTexture(0.55, 0.55, 0.55, 0.5)
+fishWatcherDivider:SetSize(356, 1)
+fishWatcherDivider:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -52)
 
 local fishWatcherMetricValues = {}
-local metricNames = { "SKILL", "TIME", "CASTS", "SKILL GAINS" }
+local metricNames = { "Skill", "Time", "Casts", "Skill Gains" }
 for index, metricName in ipairs(metricNames) do
-    local xOffset = 10 + (index - 1) * 82
+    local xOffset = (index - 1) * 89
     local label = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    label:SetPoint("TOPLEFT", fishWatcherDivider, "BOTTOMLEFT", xOffset - 10, -8)
-    label:SetWidth(78)
+    label:SetPoint("TOPLEFT", fishWatcherDivider, "BOTTOMLEFT", xOffset, -8)
+    label:SetWidth(83)
     label:SetJustifyH("LEFT")
     label:SetText(metricName)
 
     local value = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
-    value:SetWidth(78)
+    value:SetWidth(83)
+    value:SetWordWrap(false)
     value:SetJustifyH("LEFT")
     value:SetTextColor(1, 0.82, 0)
     fishWatcherMetricValues[index] = value
 end
 
 local fishWatcherSummary = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherSummary:SetPoint("TOPLEFT", fishWatcherMetricValues[1], "BOTTOMLEFT", 0, -7)
-fishWatcherSummary:SetWidth(340)
+fishWatcherSummary:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -98)
+fishWatcherSummary:SetWidth(356)
 fishWatcherSummary:SetJustifyH("LEFT")
-fishWatcherSummary:SetWordWrap(true)
+fishWatcherSummary:SetWordWrap(false)
+local fishWatcherRate = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+fishWatcherRate:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -114)
+fishWatcherRate:SetWidth(356)
+fishWatcherRate:SetJustifyH("LEFT")
+fishWatcherRate:SetWordWrap(false)
 
 local fishWatcherLastCatchLabel = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-fishWatcherLastCatchLabel:SetPoint("TOPLEFT", fishWatcherSummary, "BOTTOMLEFT", 0, -7)
-fishWatcherLastCatchLabel:SetWidth(76)
+fishWatcherLastCatchLabel:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -136)
+fishWatcherLastCatchLabel:SetWidth(356)
 fishWatcherLastCatchLabel:SetJustifyH("LEFT")
-fishWatcherLastCatchLabel:SetText("LAST CATCH")
+fishWatcherLastCatchLabel:SetText("Latest Catch")
 
-local fishWatcherLastCatch = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherLastCatch:SetPoint("TOPLEFT", fishWatcherLastCatchLabel, "TOPLEFT", 82, 0)
-fishWatcherLastCatch:SetWidth(258)
-fishWatcherLastCatch:SetJustifyH("LEFT")
-fishWatcherLastCatch:SetWordWrap(true)
+local function CreateWatcherCatchRow(name, yOffset)
+    local row = CreateFrame("Button", name, fishWatcher)
+    row:SetSize(356, 22)
+    row:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, yOffset)
+    row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetSize(20, 20)
+    row.icon:SetPoint("LEFT", 0, 0)
+    row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+    row.text:SetWidth(252)
+    row.text:SetJustifyH("LEFT")
+    row.text:SetWordWrap(false)
+    row.count = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.count:SetPoint("RIGHT", 0, 0)
+    row.count:SetWidth(68)
+    row.count:SetJustifyH("RIGHT")
+    row.count:SetWordWrap(false)
+    row:SetScript("OnClick", function(self)
+        if self.itemLink and HandleModifiedItemClick and HandleModifiedItemClick(self.itemLink) then return end
+        if self.itemID and EF.OpenFishJournal then EF.OpenFishJournal(self.itemID) end
+    end)
+    row:SetScript("OnEnter", function(self)
+        if not self.itemID then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if self.itemLink then GameTooltip:SetHyperlink(self.itemLink) else GameTooltip:SetText(self.itemName) end
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return row
+end
+
+local function SetWatcherCatch(row, itemID, itemLink, name, count)
+    row.itemID, row.itemLink, row.itemName = itemID, itemLink, name
+    row:SetEnabled(itemID ~= nil)
+    row.text:SetText(name or "None yet")
+    local color = itemID and 1 or 0.6
+    row.text:SetTextColor(color, color, color)
+    row.count:SetText(count and ("x" .. count) or "")
+    local icon
+    if itemID then
+        local getInfo = C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant
+        if getInfo then
+            local _, _, _, _, texture = getInfo(itemID)
+            icon = texture
+        end
+    end
+    row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_Fish_02")
+    row.icon:SetShown(itemID ~= nil)
+end
+local fishWatcherLastCatch = CreateWatcherCatchRow("EasyFishingWatcherLatest", -152)
 
 local fishWatcherBreakdownLabel = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-fishWatcherBreakdownLabel:SetPoint("TOPLEFT", fishWatcherLastCatch, "BOTTOMLEFT", -82, -6)
-fishWatcherBreakdownLabel:SetText("THIS SESSION'S CATCHES")
-
-local fishWatcherBreakdown = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherBreakdown:SetPoint("TOPLEFT", fishWatcherBreakdownLabel, "BOTTOMLEFT", 0, -2)
-fishWatcherBreakdown:SetWidth(340)
-fishWatcherBreakdown:SetJustifyH("LEFT")
-fishWatcherBreakdown:SetWordWrap(true)
+fishWatcherBreakdownLabel:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -184)
+fishWatcherBreakdownLabel:SetWidth(356)
+fishWatcherBreakdownLabel:SetText("Session Catches")
+local fishWatcherCatchRows = {
+    CreateWatcherCatchRow("EasyFishingWatcherCatch1", -200),
+    CreateWatcherCatchRow("EasyFishingWatcherCatch2", -224),
+}
 
 fishWatcher:SetScript("OnDragStart", function(self)
     if not InCombatLockdown() then
@@ -179,6 +255,47 @@ local function GetWorldPosition(mapID, position)
     return continentID, worldX, worldY
 end
 
+local function FindFishingSpot(zoneStats, mapID, x, y)
+    local position = CreateVector2D and CreateVector2D(x, y) or { x = x, y = y }
+    local continentID, worldX, worldY = GetWorldPosition(mapID, position)
+    local cellX = math.min(199, math.max(0, math.floor(x * 200)))
+    local cellY = math.min(199, math.max(0, math.floor(y * 200)))
+    local spotKey = string.format("%d:%d:%d", mapID, cellX, cellY)
+    local nearestKey, nearestSpot, nearestDistance
+    for candidateKey, candidate in pairs(zoneStats.spots) do
+        if type(candidate) == "table" and candidate.mapID == mapID
+            and type(candidate.x) == "number" and type(candidate.y) == "number" then
+            if candidate.x == x and candidate.y == y then
+                return candidateKey, candidate, continentID, worldX, worldY
+            end
+            if continentID then
+                local candidateContinent, candidateX, candidateY = candidate.continentID,
+                    candidate.worldX, candidate.worldY
+                if not candidateContinent or not candidateX or not candidateY then
+                    local oldPosition = CreateVector2D and CreateVector2D(candidate.x, candidate.y)
+                        or { x = candidate.x, y = candidate.y }
+                    candidateContinent, candidateX, candidateY = GetWorldPosition(mapID, oldPosition)
+                    candidate.continentID, candidate.worldX, candidate.worldY = candidateContinent,
+                        candidateX, candidateY
+                end
+                if candidateContinent == continentID then
+                    local distance = (worldX - candidateX) ^ 2 + (worldY - candidateY) ^ 2
+                    if distance <= 225 and (not nearestDistance or distance < nearestDistance) then
+                        nearestKey, nearestSpot, nearestDistance = candidateKey, candidate, distance
+                    end
+                end
+            end
+        end
+    end
+    if nearestSpot then return nearestKey, nearestSpot, continentID, worldX, worldY end
+    local baseKey, suffix = spotKey, 1
+    while zoneStats.spots[spotKey] ~= nil do
+        spotKey = baseKey .. ":" .. suffix
+        suffix = suffix + 1
+    end
+    return spotKey, nil, continentID, worldX, worldY
+end
+
 local function RecordFishingSpot(zoneStats, itemKey, itemName, quantity)
     if not C_Map or not C_Map.GetBestMapForUnit or not C_Map.GetPlayerMapPosition then
         return
@@ -190,42 +307,7 @@ local function RecordFishingSpot(zoneStats, itemKey, itemName, quantity)
     if not position or not position.GetXY then return end
     local x, y = position:GetXY()
     if not x or not y then return end
-
-    local continentID, worldX, worldY = GetWorldPosition(mapID, position)
-    local cellX = math.min(199, math.max(0, math.floor(x * 200)))
-    local cellY = math.min(199, math.max(0, math.floor(y * 200)))
-    local spotKey = string.format("%d:%d:%d", mapID, cellX, cellY)
-    local spot = zoneStats.spots[spotKey]
-
-    if not spot and continentID then
-        for candidateKey, candidate in pairs(zoneStats.spots) do
-            if type(candidate) == "table" and candidate.mapID == mapID
-                and candidate.continentID == continentID then
-                local candidateX, candidateY = candidate.worldX, candidate.worldY
-                if not candidateX or not candidateY then
-                    local oldPosition = { x = candidate.x, y = candidate.y }
-                    local oldContinentID
-                    oldContinentID, candidateX, candidateY = GetWorldPosition(mapID, oldPosition)
-                    if oldContinentID ~= continentID then
-                        candidateX, candidateY = nil, nil
-                    else
-                        candidate.continentID = oldContinentID
-                        candidate.worldX = candidateX
-                        candidate.worldY = candidateY
-                    end
-                end
-                if candidateX and candidateY then
-                    local deltaX = worldX - candidateX
-                    local deltaY = worldY - candidateY
-                    if deltaX * deltaX + deltaY * deltaY <= 225 then
-                        spotKey = candidateKey
-                        spot = candidate
-                        break
-                    end
-                end
-            end
-        end
-    end
+    local spotKey, spot, continentID, worldX, worldY = FindFishingSpot(zoneStats, mapID, x, y)
 
     if type(spot) ~= "table" then
         spot = {
@@ -249,10 +331,72 @@ local function RecordFishingSpot(zoneStats, itemKey, itemName, quantity)
     end
     item.name = itemName
     item.count = (tonumber(item.count) or 0) + quantity
+    local timestamp = GetServerTime and GetServerTime()
+    if timestamp and date then
+        item.datesByDay = type(item.datesByDay) == "table" and item.datesByDay or {}
+        local day = date("!%Y-%m-%d", timestamp)
+        item.datesByDay[day] = (tonumber(item.datesByDay[day]) or 0) + quantity
+    end
     spot.totalItems = (tonumber(spot.totalItems) or 0) + quantity
     local hour = GetGameTime()
     local bucket = math.floor(hour / 6)
     item.timeBuckets[bucket] = (tonumber(item.timeBuckets[bucket]) or 0) + quantity
+end
+
+local function GetFishJournal()
+    local fishByID = {}
+    local stats = EnsureFishingStats()
+    for itemID, item in pairs(stats.itemsByID) do
+        if type(item) == "table" then
+            local key = tostring(itemID)
+            fishByID[key] = { id = key, name = item.name or ("Item " .. key), count = 0,
+                lifetimeCount = tonumber(item.count) or 0, locations = {}, timeBuckets = {}, datesByDay = {} }
+        end
+    end
+    for zoneName, zone in pairs(stats.zones) do
+        if type(zone) == "table" and type(zone.spots) == "table" then
+            for _, spot in pairs(zone.spots) do
+                if type(spot) == "table" and type(spot.itemsByID) == "table" then
+                    for itemID, item in pairs(spot.itemsByID) do
+                        if type(item) == "table" then
+                            local key = tostring(itemID)
+                            local fish = fishByID[key]
+                            if not fish then
+                                fish = { id = key, name = item.name or ("Item " .. key), count = 0,
+                                    locations = {}, timeBuckets = {}, datesByDay = {} }
+                                fishByID[key] = fish
+                            end
+                            local count = tonumber(item.count) or 0
+                            fish.count = fish.count + count
+                            table.insert(fish.locations, { zone = zoneName, spot = spot, count = count })
+                            for bucket, amount in pairs(item.timeBuckets or {}) do
+                                fish.timeBuckets[bucket] = (fish.timeBuckets[bucket] or 0) + (tonumber(amount) or 0)
+                            end
+                            for day, amount in pairs(item.datesByDay or {}) do
+                                fish.datesByDay[day] = (fish.datesByDay[day] or 0) + (tonumber(amount) or 0)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    local journal = {}
+    for _, fish in pairs(fishByID) do
+        fish.locationCount = fish.count
+        fish.lifetimeCount = fish.lifetimeCount or 0
+        fish.count = math.max(fish.count, fish.lifetimeCount)
+        table.sort(fish.locations, function(first, second)
+            if first.count == second.count then return first.zone < second.zone end
+            return first.count > second.count
+        end)
+        table.insert(journal, fish)
+    end
+    table.sort(journal, function(first, second)
+        if first.count == second.count then return first.name < second.name end
+        return first.count > second.count
+    end)
+    return journal
 end
 
 local function FormatFishingTime(seconds)
@@ -274,6 +418,10 @@ local function UpdateFishWatcher()
     local zoneStats = EnsureZoneFishingStats(stats, zoneName)
     local zoneItems = zoneStats.totalItems
     fishWatcherZone:SetText(zoneName)
+    local paused = EF.IsFishingPaused()
+    fishWatcherStatus:SetText(paused and "Paused" or (InCombatLockdown() and "In combat"
+        or (isFishing and "Fishing" or (EF.IsLootOpen() and "Looting" or "Idle"))))
+    fishWatcherStatus:SetTextColor(paused and 0.6 or 1, paused and 0.6 or 1, paused and 0.6 or 1)
     local elapsedSeconds = math.max(1, GetTime() - fishingSession.startedAt)
     local itemsPerHour = fishingSession.totalItems * 3600 / elapsedSeconds
     local fishingSkill = EF.GetFishingSkill()
@@ -282,9 +430,10 @@ local function UpdateFishWatcher()
     fishWatcherMetricValues[3]:SetText(tostring(fishingSession.casts))
     fishWatcherMetricValues[4]:SetText(tostring(fishingSession.skillUps))
     fishWatcherSummary:SetText(string.format(
-        "%.1f items per hour  |  This session: %d items  |  This zone: %d items",
-        itemsPerHour, fishingSession.totalItems, zoneItems))
-    fishWatcherLastCatch:SetText(fishingSession.lastCatch or "None yet")
+        "Session: %d items  |  Zone: %d items", fishingSession.totalItems, zoneItems))
+    fishWatcherRate:SetText(string.format("%.1f items per hour", itemsPerHour))
+    SetWatcherCatch(fishWatcherLastCatch, fishingSession.lastCatchItemID,
+        fishingSession.lastCatchItemLink, fishingSession.lastCatch, fishingSession.lastCatchQuantity)
     local sessionItems = {}
     for _, item in pairs(fishingSession.itemsByID) do
         table.insert(sessionItems, item)
@@ -295,19 +444,13 @@ local function UpdateFishWatcher()
         end
         return firstItem.count > secondItem.count
     end)
-    local catchSummary = {}
-    for index = 1, math.min(#sessionItems, 2) do
+    fishWatcherBreakdownLabel:SetText(#sessionItems > 2
+        and string.format("Session Catches  (+%d more)", #sessionItems - 2) or "Session Catches")
+    for index, row in ipairs(fishWatcherCatchRows) do
         local item = sessionItems[index]
-        table.insert(catchSummary, string.format("%s x%d", item.name, item.count))
+        SetWatcherCatch(row, item and item.id, item and item.link, item and item.name, item and item.count)
+        row:SetShown(item ~= nil or index == 1)
     end
-    if #sessionItems > 2 then
-        table.insert(catchSummary, string.format("+%d more", #sessionItems - 2))
-    end
-    fishWatcherBreakdown:SetText(#catchSummary > 0 and table.concat(catchSummary, ", ") or "None yet")
-    local wrappedHeight = math.max(0, fishWatcherSummary:GetStringHeight() - 12)
-        + math.max(0, fishWatcherLastCatch:GetStringHeight() - 12)
-        + math.max(0, fishWatcherBreakdown:GetStringHeight() - 12)
-    fishWatcher:SetHeight(148 + wrappedHeight)
     fishWatcher:Show()
 end
 
@@ -328,14 +471,23 @@ local function EndFishingSession()
     fishWatcher:Hide()
 end
 
+local function GetFishingSessionTime()
+    if not fishingSession then return nil, 0 end
+    local endedAt = isFishing and GetTime() or fishingSession.lastActivityAt
+    return fishingSession.zone, math.max(0, endedAt - fishingSession.startedAt)
+end
+
 local function StartFishingSession()
+    local zoneName = GetRealZoneText() or "Unknown zone"
+    if fishingSession and fishingSession.zone ~= zoneName then
+        EndFishingSession()
+    end
     if fishingSessionEndTimer then
         fishingSessionEndTimer:Cancel()
         fishingSessionEndTimer = nil
     end
     if not fishingSession then
         local stats = EnsureFishingStats()
-        local zoneName = GetRealZoneText() or "Unknown zone"
         local zoneStats = EnsureZoneFishingStats(stats, zoneName)
         stats.totalSessions = stats.totalSessions + 1
         zoneStats.sessions = zoneStats.sessions + 1
@@ -355,6 +507,8 @@ local function StartFishingSession()
     local stats = EnsureFishingStats()
     local sessionZoneStats = EnsureZoneFishingStats(stats, fishingSession.zone)
     fishingSession.casts = fishingSession.casts + 1
+    fishingSession.lootRecordedForCast = false
+    fishingSession.lootRecordedSlots = {}
     fishingSession.lastActivityAt = castTime
     sessionZoneStats.casts = sessionZoneStats.casts + 1
     stats.totalCasts = stats.totalCasts + 1
@@ -406,11 +560,14 @@ local function RecordFishingLoot()
     for lootSlot = 1, GetNumLootItems() do
         local itemLink = GetLootSlotLink(lootSlot)
         local itemID = itemLink and tonumber(itemLink:match("|Hitem:(%d+)"))
-        if itemID then
+        local _, itemName, slotQuantity = GetLootSlotInfo(lootSlot)
+        local slotKey = tostring(lootSlot) .. ":" .. tostring(itemID)
+        local observedQuantity = tonumber(slotQuantity) or 1
+        local quantity = observedQuantity - (fishingSession.lootRecordedSlots[slotKey] or 0)
+        if itemID and quantity > 0 then
             successfulCast = true
-            local _, itemName, quantity = GetLootSlotInfo(lootSlot)
+            fishingSession.lootRecordedSlots[slotKey] = observedQuantity
             itemName = itemName or GetItemInfo(itemID) or ("Item " .. itemID)
-            quantity = tonumber(quantity) or 1
 
             local itemKey = tostring(itemID)
             local totalItem = stats.itemsByID[itemKey]
@@ -427,6 +584,7 @@ local function RecordFishingLoot()
                 fishingSession.itemsByID[itemKey] = sessionItem
             end
             sessionItem.name = itemName
+            sessionItem.id, sessionItem.link = itemID, itemLink
             sessionItem.count = sessionItem.count + quantity
 
             local zoneItem = zoneStats.itemsByID[itemKey]
@@ -443,6 +601,9 @@ local function RecordFishingLoot()
             zoneStats.totalItems = zoneStats.totalItems + quantity
             fishingSession.totalItems = fishingSession.totalItems + quantity
             fishingSession.lastCatch = itemName
+            fishingSession.lastCatchItemID = itemID
+            fishingSession.lastCatchItemLink = itemLink
+            fishingSession.lastCatchQuantity = observedQuantity
             stats.lastCatchItemID = itemID
             stats.lastCatchItemLink = itemLink
             stats.lastCatchName = itemName
@@ -450,8 +611,12 @@ local function RecordFishingLoot()
     end
 
     if successfulCast then
-        stats.successfulCasts = stats.successfulCasts + 1
-        zoneStats.successfulCasts = zoneStats.successfulCasts + 1
+        fishingSession.lastActivityAt = GetTime()
+        if not fishingSession.lootRecordedForCast then
+            fishingSession.lootRecordedForCast = true
+            stats.successfulCasts = stats.successfulCasts + 1
+            zoneStats.successfulCasts = zoneStats.successfulCasts + 1
+        end
     end
 
     UpdateFishWatcher()
@@ -476,11 +641,16 @@ soundFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
 soundFrame:RegisterEvent("PLAYER_STARTED_MOVING")
 soundFrame:RegisterEvent("PLAYER_LOGOUT")
 soundFrame:RegisterEvent("LOOT_OPENED")
+soundFrame:RegisterEvent("LOOT_READY")
 soundFrame:RegisterEvent("SKILL_LINES_CHANGED")
 soundFrame:RegisterEvent("CHAT_MSG_SKILL")
 local userBGSetting = nil
 
 local function RestoreFishingSoundSettings()
+    if EasyFishingDB and EasyFishingDB.userMasterSoundSetting ~= nil then
+        SetCVarMasterSound(EasyFishingDB.userMasterSoundSetting)
+        EasyFishingDB.userMasterSoundSetting = nil
+    end
     if EasyFishingDB and EasyFishingDB.userSoundSetting ~= nil then
         SetCVarSound(EasyFishingDB.userSoundSetting)
         EasyFishingDB.userSoundSetting = nil
@@ -491,12 +661,38 @@ local function RestoreFishingSoundSettings()
     end
 end
 
+local function UpdateFishingSoundSettings()
+    if not isFishing or not EasyFishingDB or not EasyFishingDB.enableSound then
+        RestoreFishingSoundSettings()
+        return
+    end
+    local masterSound = GetCVarMasterSound()
+    if masterSound ~= nil and masterSound ~= "1" then
+        if EasyFishingDB.userMasterSoundSetting == nil then EasyFishingDB.userMasterSoundSetting = masterSound end
+        SetCVarMasterSound("1")
+    end
+    local curSound = GetCVarSound()
+    if curSound ~= "1" then
+        if EasyFishingDB.userSoundSetting == nil then
+            EasyFishingDB.userSoundSetting = curSound
+        end
+        SetCVarSound("1")
+    end
+    local curBG = GetCVarBG()
+    if userBGSetting == nil then
+        userBGSetting = curBG
+    end
+    if curBG ~= "1" then
+        SetCVarBG("1")
+    end
+end
+
 soundFrame:SetScript("OnEvent", function(_, event, unit)
     if event == "PLAYER_LOGOUT" then
         isFishing = false
         RestoreFishingSoundSettings()
         return
-    elseif event == "LOOT_OPENED" then
+    elseif event == "LOOT_OPENED" or event == "LOOT_READY" then
         RecordFishingLoot()
         return
     elseif event == "PLAYER_STARTED_MOVING" then
@@ -524,22 +720,7 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
             fishingSession.lastActivityAt = GetTime()
         end
         EasyFishingDB = EasyFishingDB or {}
-
-        -- Sound automation
-        if EasyFishingDB.enableSound then
-            local curSound = GetCVarSound()
-            if curSound ~= "1" then
-                EasyFishingDB.userSoundSetting = curSound
-                SetCVarSound("1")
-            end
-            local curBG = GetCVarBG()
-            if userBGSetting == nil then
-                userBGSetting = curBG
-            end
-            if curBG ~= "1" then
-                SetCVarBG("1")
-            end
-        end
+        UpdateFishingSoundSettings()
 
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         if not isFishing then return end
@@ -557,6 +738,10 @@ end)
 EF.FishWatcher = fishWatcher
 EF.EnsureFishingStats = EnsureFishingStats
 EF.EnsureZoneFishingStats = EnsureZoneFishingStats
+EF.FindFishingSpot = FindFishingSpot
+EF.GetFishJournal = GetFishJournal
 EF.FormatFishingTime = FormatFishingTime
 EF.UpdateFishWatcher = UpdateFishWatcher
 EF.EndFishingSession = EndFishingSession
+EF.GetFishingSessionTime = GetFishingSessionTime
+EF.UpdateFishingSoundSettings = UpdateFishingSoundSettings
