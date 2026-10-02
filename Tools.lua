@@ -221,9 +221,11 @@ function EF.InitializeFishingTools()
     titleIcon:SetSize(16, 16)
     titleIcon:SetPoint("TOPLEFT", controls, "TOPLEFT", 12, -10)
     titleIcon:SetTexture("Interface\\Icons\\Trade_Fishing")
-    local title = AddText(controls, "GameFontNormal", 132, titleIcon, "TOPRIGHT", 6, 0)
+    local title = AddText(controls, "GameFontNormal", 104, titleIcon, "TOPRIGHT", 6, 0)
     title:SetText("EASYFISHING")
-    local state = AddText(controls, "GameFontHighlightSmall", 194, controls, "TOPRIGHT", -34, -12)
+    local state = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    state:SetPoint("TOPRIGHT", controls, "TOPRIGHT", -12, -12)
+    state:SetWidth(194)
     state:SetJustifyH("RIGHT")
     state:SetWordWrap(false)
     local divider = controls:CreateTexture(nil, "ARTWORK")
@@ -232,7 +234,9 @@ function EF.InitializeFishingTools()
     divider:SetPoint("TOPLEFT", controls, "TOPLEFT", 12, -34)
     local enchantText = AddText(controls, "GameFontHighlightSmall", 190, divider, "BOTTOMLEFT", 0, -9)
     enchantText:SetWordWrap(false)
-    local lureText = AddText(controls, "GameFontHighlightSmall", 132, divider, "BOTTOMRIGHT", 0, -9)
+    local lureText = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    lureText:SetPoint("TOPRIGHT", controls, "TOPRIGHT", -12, -46)
+    lureText:SetWidth(132)
     lureText:SetJustifyH("RIGHT")
     lureText:SetWordWrap(false)
     local pauseButton
@@ -251,7 +255,11 @@ function EF.InitializeFishingTools()
     end
     local broker, iconLibrary
     function EF.UpdateFishingControls()
-        controls:SetShown(EasyFishingDB.showFishingControls)
+        local toolWindow = _G.EasyFishingWindow
+        local optionsWindow = (SettingsPanel and SettingsPanel:IsShown())
+            or (InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown())
+        controls:SetShown(EasyFishingDB.showFishingControls
+            and not (toolWindow and toolWindow:IsShown()) and not optionsWindow)
         local status = FishingState()
         state:SetText(status)
         if EF.IsFishingPaused() or InCombatLockdown() or EF.IsLootOpen()
@@ -274,6 +282,11 @@ function EF.InitializeFishingTools()
         end
         lureText:SetText(string.format("Eligible lures  %d", lure.count))
         if broker then broker.text = status end
+    end
+    local toolWindow = _G.EasyFishingWindow
+    if toolWindow then
+        toolWindow:HookScript("OnShow", EF.UpdateFishingControls)
+        toolWindow:HookScript("OnHide", EF.UpdateFishingControls)
     end
     local updateFrame = CreateFrame("Frame", "EasyFishingToolsUpdate")
     updateFrame:SetScript("OnUpdate", function(self, elapsed)

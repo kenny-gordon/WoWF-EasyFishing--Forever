@@ -95,6 +95,7 @@ function methods:GetStringHeight()
     return lines*12
 end
 function methods:SetAttribute(key, value) assert(not Combat or SecureState); self[key] = value end
+function methods:GetAttribute(key) return self[key] end
 function methods:ClearBindings() assert(SecureState); Binding=nil end
 function methods:GetParent() return self.parent end
 for _, key in ipairs({
@@ -351,12 +352,18 @@ for _,frame in ipairs(Frames) do
     if frame.kind=='FontString' and frame.parent==NamedFrames.EasyFishingControls then
         if frame.width==194 then controlState=frame end
         if frame.width==190 then controlEnchant=frame end
-        if frame.width==132 and frame.point and frame.point[2] and frame.point[2].parent==NamedFrames.EasyFishingControls then controlLure=frame end
+        if frame.width==132 and frame.point and frame.point[2]
+            and (frame.point[2]==NamedFrames.EasyFishingControls
+                or frame.point[2].parent==NamedFrames.EasyFishingControls) then controlLure=frame end
     end
 end
 assert(controlTitle and controlState and controlEnchant and controlLure)
 assert(controlState.text=='Double-click Left Mouse' and controlEnchant.text=='Pole enchant  None'
     and controlLure.text=='Eligible lures  3')
+assert(controlState.point[1]=='TOPRIGHT' and controlState.point[2]==NamedFrames.EasyFishingControls)
+assert(controlLure.point[1]=='TOPRIGHT' and controlLure.point[2]==NamedFrames.EasyFishingControls)
+Addon.OpenWindow('home'); assert(not NamedFrames.EasyFishingControls.shown)
+NamedFrames.EasyFishingWindow:Hide(); assert(NamedFrames.EasyFishingControls.shown)
 assert(Addon.GetMouseFishingStatus():find('double-click Left Mouse',1,true))
 assert(Addon.GetMouseFishingStatus():find('Next action applies lure 6529',1,true))
 EasyFishingDB.castClickMode='SingleClick'; Addon.UpdateFishingControls()
@@ -365,6 +372,16 @@ EasyFishingDB.castClickMode='DoubleClick'; Addon.UpdateFishingControls()
 Enchanted=true; assert(Addon.GetLureStatus().seconds==90)
 PoleEquipped=false; assert(not Addon.GetLureStatus().active)
 Addon.UpdateFishingControls(); PoleEquipped=true; Enchanted=false
+EasyFishingDB.enableAutoLure=false; Addon.BindCastAction('LeftButton')
+assert(NamedFrames.EasyFishingAutoLureButton.type=='spell'
+    and NamedFrames.EasyFishingAutoLureButton.spell=='Fishing', 'no lures must fall back to Fishing')
+Addon.ClearBinding(); EasyFishingDB.enableAutoLure=true
+local oldBauble,oldAttractor=Counts[6529],Counts[6533]
+Counts[6529],Counts[6533]=0,0
+Addon.BindCastAction('LeftButton')
+assert(NamedFrames.EasyFishingAutoLureButton.type=='spell'
+    and NamedFrames.EasyFishingAutoLureButton.spell=='Fishing', 'zero eligible lures must cast Fishing')
+Addon.ClearBinding(); Counts[6529],Counts[6533]=oldBauble,oldAttractor
 if BrokerMode==2 then
     assert(IconRegistered and not NamedFrames.EasyFishingMinimapButton)
 else
@@ -425,10 +442,12 @@ DispatchMouse('LeftButton',true)
 assert(MouseActions==0 and Binding=='BUTTON1' and not NamedFrames.EasyFishingAutoLureButton.useOnKeyDown)
 DispatchMouse('LeftButton',false)
 assert(MouseActions==1 and Binding==nil, 'single click executes on release before cleanup')
+assert(Addon.GetClickDiagnostics():find('secure pre/ready/post: %d+/%d+/%d+'))
 EasyFishingDB.castClickMode='DoubleClick'; Addon.ClearBinding(); MouseActions=0
 Emit('GLOBAL_MOUSE_DOWN','LeftButton'); Emit('GLOBAL_MOUSE_UP','LeftButton')
 Clock=Clock+0.1; DispatchMouse('LeftButton',true)
 assert(MouseActions==1 and Binding==nil, 'double click executes on second press')
+assert(Addon.GetClickDiagnostics():find('armed: %d+'))
 EasyFishingDB.castClickMode=oldMode; Addon.ClearBinding()
 Addon.SetFishingPaused(true); assert(Addon.GetMouseFishingStatus():find('paused',1,true))
 Addon.SetFishingPaused(false)

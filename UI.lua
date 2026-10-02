@@ -2149,11 +2149,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         trainerHeaderLocation:SetText("Town / Zone")
 
         local trainerHeaderCoordinates = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainerHeaderCoordinates:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 432, 0)
-        trainerHeaderCoordinates:SetText("Coordinates")
+        trainerHeaderCoordinates:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 416, 0)
+        trainerHeaderCoordinates:SetWidth(78)
+        trainerHeaderCoordinates:SetText("Coords.")
 
         local trainerHeaderWaypoint = guideTrainersView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         trainerHeaderWaypoint:SetPoint("TOPLEFT", trainerHeaderName, "TOPLEFT", 500, 0)
+        trainerHeaderWaypoint:SetWidth(84)
         trainerHeaderWaypoint:SetText("Map")
 
         local trainerScroll = CreateFrame("ScrollFrame", "EasyFishingTrainerScrollFrame",
@@ -2234,20 +2236,20 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
                     row.location = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                     row.location:SetPoint("TOPLEFT", row, "TOPLEFT", 242, -3)
-                    row.location:SetWidth(180)
+                    row.location:SetWidth(168)
                     row.location:SetJustifyH("LEFT")
                     row.location:SetWordWrap(false)
 
                     row.zone = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                     row.zone:SetPoint("TOPLEFT", row.location, "BOTTOMLEFT", 0, -1)
-                    row.zone:SetWidth(180)
+                    row.zone:SetWidth(168)
                     row.zone:SetJustifyH("LEFT")
                     row.zone:SetTextColor(0.72, 0.72, 0.72)
                     row.zone:SetWordWrap(false)
 
                     row.coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                    row.coordinates:SetPoint("TOPLEFT", row, "TOPLEFT", 432, -12)
-                    row.coordinates:SetWidth(64)
+                    row.coordinates:SetPoint("TOPLEFT", row, "TOPLEFT", 416, -12)
+                    row.coordinates:SetWidth(78)
                     row.coordinates:SetJustifyH("RIGHT")
 
                     row.waypointButton = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
@@ -2601,6 +2603,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 print("EasyFishing: " .. EF.GetMouseFishingStatus())
                 print("EasyFishing: " .. GetButtonOption(EasyFishingDB.doubleClickButton).label
                     .. ", " .. EasyFishingDB.castClickMode .. ", delay " .. EasyFishingDB.doubleClickDelay .. "s.")
+                print("EasyFishing: " .. EF.GetClickDiagnostics())
             elseif command == "options" or command == "settings" then
                 ShowOptionsPage("settings")
             elseif command == "about" then

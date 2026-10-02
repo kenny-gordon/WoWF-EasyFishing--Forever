@@ -10,6 +10,16 @@ local pendingClearTimer = nil
 local clearBindingOnMouseUp = false
 local lootOpen = false
 local fishingPaused = false
+local clickDiagnostics = {
+    mouseDowns = 0,
+    mouseUps = 0,
+    bindingsArmed = 0,
+    bindingsExpired = 0,
+    securePreClicks = 0,
+    secureReadyClicks = 0,
+    securePostClicks = 0,
+    lastBlocker = "No selected mouse click observed yet.",
+}
 
 local DB_DEFAULTS = {
     enableDoubleClick = true,
@@ -456,14 +466,20 @@ local function UpdateKeyboardCastAction()
     end
 end
 keyboardCastButton:SetScript("PreClick", UpdateKeyboardCastAction)
+local GetMouseFishingStatus
 autoLureButton:SetScript("PreClick", function(self)
+    clickDiagnostics.securePreClicks = clickDiagnostics.securePreClicks + 1
     if InCombatLockdown() then return end
     if not CanStartFishing() or not IsMouseOverWorld() or UnitExists("mouseover") or UnitExists("target") then
+        clickDiagnostics.lastBlocker = "Secure click rejected: " .. GetMouseFishingStatus()
         self:SetAttribute("type", nil)
         ClearBinding()
+    elseif self:GetAttribute("type") then
+        clickDiagnostics.secureReadyClicks = clickDiagnostics.secureReadyClicks + 1
     end
 end)
 autoLureButton:SetScript("PostClick", function(_, _, down)
+    clickDiagnostics.securePostClicks = clickDiagnostics.securePostClicks + 1
     local singleClick = EasyFishingDB.castClickMode == "SingleClick"
     if (singleClick and not down) or (not singleClick and down) then ClearBinding() end
 end)
@@ -497,9 +513,11 @@ local function BindCastAction(buttonName)
 
     SetOverrideBindingClick(
         castOwner, true, option.binding, autoLureButton:GetName(), "LeftButton")
+    clickDiagnostics.bindingsArmed = clickDiagnostics.bindingsArmed + 1
+    clickDiagnostics.lastBlocker = "Binding armed; waiting for the configured click."
 end
 
-local function GetMouseFishingStatus()
+GetMouseFishingStatus = function()
     if not EasyFishingDB.enableDoubleClick then return "Click-to-Cast is disabled." end
     if fishingPaused then return "Fishing is paused. Use /ef resume." end
     if InCombatLockdown() then return "Casting is blocked in combat." end
@@ -555,6 +573,13 @@ EF.SetFishingPaused = SetFishingPaused
 EF.CanStartFishing = CanStartFishing
 EF.GetLureStatus = GetLureStatus
 EF.GetMouseFishingStatus = GetMouseFishingStatus
+EF.GetClickDiagnostics = function()
+    return string.format("Mouse down/up: %d/%d  |  armed: %d  |  expired: %d  |  secure pre/ready/post: %d/%d/%d\nLast click: %s",
+        clickDiagnostics.mouseDowns, clickDiagnostics.mouseUps, clickDiagnostics.bindingsArmed,
+        clickDiagnostics.bindingsExpired, clickDiagnostics.securePreClicks,
+        clickDiagnostics.secureReadyClicks, clickDiagnostics.securePostClicks,
+        clickDiagnostics.lastBlocker)
+end
 EF.UpdateKeyboardCastAction = UpdateKeyboardCastAction
 _G.BINDING_HEADER_EASYFISHING = "EasyFishing: Forever"
 _G["BINDING_NAME_CLICK EasyFishingKeyboardCastButton:LeftButton"] = "Cast Fishing / Apply Lure"
@@ -594,6 +619,15 @@ function EF.InitializeClickHandling()
             ClearBinding()
             UpdateKeyboardCastAction()
             return
+        end
+
+        if buttonName == EasyFishingDB.doubleClickButton then
+            if evt == "GLOBAL_MOUSE_DOWN" then
+                clickDiagnostics.mouseDowns = clickDiagnostics.mouseDowns + 1
+                clickDiagnostics.lastBlocker = GetMouseFishingStatus()
+            else
+                clickDiagnostics.mouseUps = clickDiagnostics.mouseUps + 1
+            end
         end
 
         if evt == "GLOBAL_MOUSE_UP" then
@@ -670,6 +704,8 @@ function EF.InitializeClickHandling()
             CancelPendingTimer()
             pendingClearTimer = C_Timer.NewTimer(MAX_DOUBLE_CLICK, function()
                 pendingClearTimer = nil
+                clickDiagnostics.bindingsExpired = clickDiagnostics.bindingsExpired + 1
+                clickDiagnostics.lastBlocker = "Double-click window expired before the second press."
                 if not InCombatLockdown() then
                     ClearOverrideBindings(castOwner)
                 end
