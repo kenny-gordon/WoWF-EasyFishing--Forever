@@ -199,10 +199,23 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             title:SetText(text)
 
             local rule = page:CreateTexture(nil, "ARTWORK")
-            rule:SetColorTexture(0.4, 0.4, 0.4, 0.6)
+            rule:SetColorTexture(0.42, 0.34, 0.17, 0.6)
             rule:SetSize(PAGE_CONTENT_WIDTH, 1)
             rule:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
             return rule
+        end
+
+        local function ContentHeading(parent, text, anchor, relativePoint, xOffset, yOffset, width)
+            local heading = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+            heading:SetPoint("TOPLEFT", anchor, relativePoint, xOffset, yOffset)
+            heading:SetTextColor(1, 0.82, 0)
+            heading:SetText(text)
+
+            local rule = parent:CreateTexture(nil, "ARTWORK")
+            rule:SetColorTexture(0.42, 0.34, 0.17, 0.6)
+            rule:SetSize(width, 1)
+            rule:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -3)
+            return heading
         end
 
         local divider = PageHeader(settingsPage, "EasyFishing: Forever")
@@ -505,9 +518,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         statisticsCaveat:SetWordWrap(true)
         statisticsCaveat:SetText("Only items shown in the client's Fishing loot window are counted.")
 
-        local zoneStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        zoneStatsTitle:SetPoint("TOPLEFT", statisticsSummary, "BOTTOMLEFT", 0, -24)
-        zoneStatsTitle:SetText("Items by Zone")
+        local zoneStatsTitle = ContentHeading(
+            statisticsPage, "Items by Zone", statisticsSummary, "BOTTOMLEFT", 0, -24, 300)
 
         local zoneStatsList = CreateFrame("Frame", nil, statisticsPage)
         zoneStatsList:SetPoint("TOPLEFT", zoneStatsTitle, "BOTTOMLEFT", 0, -10)
@@ -520,9 +532,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local zoneStatsMore = zoneStatsList:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         zoneStatsMore:SetWidth(292)
 
-        local itemStatsTitle = statisticsPage:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        itemStatsTitle:SetPoint("TOPLEFT", zoneStatsTitle, "TOPLEFT", 310, 0)
-        itemStatsTitle:SetText("Top Catches")
+        local itemStatsTitle = ContentHeading(
+            statisticsPage, "Top Catches", zoneStatsTitle, "TOPLEFT", 310, 0, 300)
 
         local itemStatsList = CreateFrame("Frame", nil, statisticsPage)
         itemStatsList:SetPoint("TOPLEFT", itemStatsTitle, "BOTTOMLEFT", 0, -10)
@@ -1031,22 +1042,17 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         guideGearView:SetAllPoints(guideTrainingView)
         guideGearView:Hide()
 
-        local trainingTitle = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        trainingTitle:SetPoint("TOPLEFT", guideTrainingView, "TOPLEFT", 0, 0)
-        trainingTitle:SetTextColor(1, 0.82, 0)
-        trainingTitle:SetText("Training and Leveling")
-
-        local campTitle = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        campTitle:SetPoint("TOPLEFT", guideTrainingView, "TOPLEFT", 320, 0)
-        campTitle:SetTextColor(1, 0.82, 0)
-        campTitle:SetText("Lures and Campsite Crafts")
+        local trainingTitle = ContentHeading(
+            guideTrainingView, "Training and Leveling", guideTrainingView, "TOPLEFT", 0, 0, 300)
+        local campTitle = ContentHeading(
+            guideTrainingView, "Lures and Campsite Crafts", guideTrainingView, "TOPLEFT", 320, 0, 300)
 
         local trainingRankRows = {}
         for index, rank in ipairs(EF.Data.FISHING_RANKS) do
             local row = CreateFrame("Frame", nil, guideTrainingView)
             row.rank = rank
             row:SetSize(300, 80)
-            row:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -8 - ((index - 1) * 82))
+            row:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -8 - ((index - 1) * 86))
 
             row.title = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             row.title:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
@@ -1069,12 +1075,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.detail:SetWordWrap(true)
             row.detail:SetText(rank.detail)
 
-            if index < #EF.Data.FISHING_RANKS then
-                row.rule = row:CreateTexture(nil, "ARTWORK")
-                row.rule:SetColorTexture(0.35, 0.35, 0.35, 0.45)
-                row.rule:SetSize(300, 1)
-                row.rule:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
-            end
+            row.progressBack = row:CreateTexture(nil, "BACKGROUND")
+            row.progressBack:SetColorTexture(0.20, 0.18, 0.13, 0.85)
+            row.progressBack:SetSize(292, 4)
+            row.progressBack:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, -4)
+
+            row.progress = row:CreateTexture(nil, "ARTWORK")
+            row.progress:SetColorTexture(0.92, 0.63, 0.12, 1)
+            row.progress:SetSize(2, 4)
+            row.progress:SetPoint("BOTTOMLEFT", row.progressBack, "BOTTOMLEFT", 0, 0)
             trainingRankRows[index] = row
         end
 
@@ -1120,10 +1129,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             lureRows[index] = row
         end
 
-        local campCraftTitle = guideTrainingView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        campCraftTitle:SetPoint("TOPLEFT", lureRows[#lureRows], "BOTTOMLEFT", 0, -8)
-        campCraftTitle:SetTextColor(1, 0.82, 0)
-        campCraftTitle:SetText("Campsite Recipes")
+        local campCraftTitle = ContentHeading(
+            guideTrainingView, "Campsite Recipes", lureRows[#lureRows], "BOTTOMLEFT", 0, -8, 300)
 
         local campRows = {}
         for index, campItem in ipairs(EF.Data.FISHING_CAMP_ITEMS) do
@@ -1169,10 +1176,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             campRows[index] = row
         end
 
-        local gearTitle = guideGearView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        gearTitle:SetPoint("TOPLEFT", guideGearView, "TOPLEFT", 0, 0)
-        gearTitle:SetTextColor(1, 0.82, 0)
-        gearTitle:SetText("Fishing Skill Bonuses")
+        local gearTitle = ContentHeading(
+            guideGearView, "Fishing Skill Bonuses", guideGearView, "TOPLEFT", 0, 0, 300)
 
         local gearRows = {}
         for index, boost in ipairs(EF.Data.FISHING_BOOSTS) do
@@ -1193,7 +1198,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, 0)
             row.name:SetWidth(175)
             row.name:SetJustifyH("LEFT")
-            row.name:SetText(boost.name)
+            row.name:SetWordWrap(false)
+            row.name:SetText(boost.displayName or boost.name)
 
             row.bonus = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             row.bonus:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
@@ -1220,14 +1226,12 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             gearRows[index] = row
         end
 
-        local rewardsTitle = guideGearView:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        rewardsTitle:SetPoint("TOPLEFT", guideGearView, "TOPLEFT", 320, 0)
-        rewardsTitle:SetTextColor(1, 0.82, 0)
-        rewardsTitle:SetText("Find Fish and Quest Rewards")
+        local rewardsTitle = ContentHeading(
+            guideGearView, "Find Fish and Quest Rewards", guideGearView, "TOPLEFT", 320, 0, 300)
 
         local findFish = EF.Data.FISHING_ABILITIES[1]
         local findFishRow = CreateFrame("Frame", nil, guideGearView)
-        findFishRow:SetSize(300, 42)
+        findFishRow:SetSize(300, 40)
         findFishRow:SetPoint("TOPLEFT", rewardsTitle, "BOTTOMLEFT", 0, -8)
         findFishRow:EnableMouse(true)
 
@@ -1239,18 +1243,44 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
         local findFishName = findFishRow:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         findFishName:SetPoint("TOPLEFT", findFishIcon, "TOPRIGHT", 6, 0)
+        findFishName:SetWidth(190)
+        findFishName:SetJustifyH("LEFT")
         findFishName:SetText(findFish.name)
+
+        local findFishButton = CreateFrame("Button", nil, guideGearView, "UIPanelButtonTemplate")
+        findFishButton:SetSize(94, 22)
+        findFishButton:SetPoint("TOPRIGHT", findFishRow, "TOPRIGHT", 0, 0)
+        findFishButton:SetText("Spellbook")
+        findFishButton:SetScript("OnClick", function()
+            if type(ToggleSpellBook) == "function" then
+                ToggleSpellBook(BOOKTYPE_SPELL or "spell")
+            elseif SpellBookFrame then
+                SpellBookFrame:Show()
+            else
+                print("EasyFishing: the spellbook is unavailable on this client.")
+            end
+        end)
+        findFishButton:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(findFish.name)
+            GameTooltip:AddLine(findFish.details, 1, 1, 1, true)
+            GameTooltip:AddLine("Cooldown: " .. findFish.cooldown, 0.75, 0.75, 0.75)
+            GameTooltip:AddLine("Drag Find Fish from the spellbook to your action bar.", 0.75, 0.75, 0.75, true)
+            GameTooltip:Show()
+        end)
+        findFishButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         local findFishDetail = findFishRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         findFishDetail:SetPoint("TOPLEFT", findFishName, "BOTTOMLEFT", 0, -1)
-        findFishDetail:SetWidth(265)
-        findFishDetail:SetText("Shows nearby fishing pools on your minimap.")
+        findFishDetail:SetWidth(244)
+        findFishDetail:SetJustifyH("LEFT")
+        findFishDetail:SetText("Fishing skill 1+  |  Pools show on minimap")
 
         findFishRow:SetScript("OnEnter", function()
             GameTooltip:SetOwner(findFishRow, "ANCHOR_RIGHT")
             GameTooltip:SetText(findFish.name)
             GameTooltip:AddLine(findFish.details, 1, 1, 1, true)
-            GameTooltip:AddLine("Requires Fishing skill 1; 1.5-second cooldown.", 0.75, 0.75, 0.75)
+            GameTooltip:AddLine("Cooldown: " .. findFish.cooldown, 0.75, 0.75, 0.75)
             GameTooltip:Show()
         end)
         findFishRow:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1258,38 +1288,44 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local rewardScroll = CreateFrame("ScrollFrame", "EasyFishingQuestRewardsScroll",
             guideGearView, "UIPanelScrollFrameTemplate")
         rewardScroll:SetPoint("TOPLEFT", findFishRow, "BOTTOMLEFT", -2, -8)
-        rewardScroll:SetSize(300, 290)
+        rewardScroll:SetSize(300, math.min(#EF.Data.FISHING_QUEST_REWARDS, 8) * 36)
         local rewardContent = CreateFrame("Frame", nil, rewardScroll)
-        rewardContent:SetSize(280, #EF.Data.FISHING_QUEST_REWARDS * 42)
+        rewardContent:SetSize(280, math.max(1, #EF.Data.FISHING_QUEST_REWARDS * 36))
         rewardScroll:SetScrollChild(rewardContent)
 
         local rewardRows = {}
         for index, quest in ipairs(EF.Data.FISHING_QUEST_REWARDS) do
             local row = CreateFrame("Frame", nil, rewardContent)
-            row:SetSize(278, 40)
-            row:SetPoint("TOPLEFT", rewardContent, "TOPLEFT", 0, -((index - 1) * 42))
+            row:SetSize(278, 34)
+            row:SetPoint("TOPLEFT", rewardContent, "TOPLEFT", 0, -((index - 1) * 36))
             row:EnableMouse(true)
 
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetSize(24, 24)
             row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
-            row.icon:SetTexture(quest.rewardItemID and GetItemTexture(quest.rewardItemID)
-                or "Interface\\Icons\\INV_Misc_QuestionMark")
+            local rewardIcon = quest.rewardItemID and GetItemTexture(quest.rewardItemID)
+                or (quest.rewardSpellID and GetSpellIcon(quest.rewardSpellID))
+            row.icon:SetTexture(rewardIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
 
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
-            row.name:SetWidth(242)
-            row.name:SetHeight(18)
+            row.name:SetWidth(160)
             row.name:SetJustifyH("LEFT")
             row.name:SetWordWrap(false)
-            row.name:SetText(quest.name)
+            row.name:SetText(quest.rewardName or quest.reward)
 
-            row.reward = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            row.reward:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
-            row.reward:SetWidth(242)
-            row.reward:SetJustifyH("LEFT")
-            row.reward:SetWordWrap(false)
-            row.reward:SetText(quest.reward)
+            row.value = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.value:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
+            row.value:SetWidth(82)
+            row.value:SetJustifyH("RIGHT")
+            row.value:SetText(quest.rewardValue or "Reward")
+            row.value:SetTextColor(1, 0.82, 0)
+
+            row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
+            row.detail:SetWidth(244)
+            row.detail:SetJustifyH("LEFT")
+            row.detail:SetText(quest.sourceLabel or quest.name)
 
             row:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -1376,7 +1412,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             trainerIntro:SetText(string.format("%d of %d Fishing NPCs. Search by name, role, town, or zone.",
                 #trainers, #EF.Data.FISHING_NPCS))
-            trainerContent:SetHeight(math.max(40, #trainers * 40))
+            trainerContent:SetHeight(math.max(36, #trainers * 36))
             if #trainers == 0 then
                 trainerEmptyText:Show()
             else
@@ -1389,7 +1425,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local row = trainerRows[index]
                 if not row then
                     row = CreateFrame("Frame", nil, trainerContent)
-                    row:SetSize(590, 38)
+                    row:SetSize(590, 34)
 
                     row.background = row:CreateTexture(nil, "BACKGROUND")
                     row.background:SetAllPoints(row)
@@ -1423,7 +1459,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 end
 
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 40))
+                row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 36))
                 row.background:SetColorTexture(0.55, 0.48, 0.3, index % 2 == 0 and 0.07 or 0.025)
                 row.name:SetText(trainer.name)
                 row.role:SetText(string.format("%s  |  Level %d", trainer.role, trainer.level))
@@ -1481,21 +1517,25 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local function RefreshForeverGuide()
             local skill = GetFishingSkill()
             if skill then
-                local guidance
-                if skill < 25 then
-                    guidance = "Apprentice: use Shiny Bauble below 25 in starter zones. Next training at 75."
-                elseif skill < 75 then
-                    guidance = "Apprentice: starter zones reach a 100% catch rate at 25. Next training at 75."
-                elseif skill < 150 then
-                    guidance = "Journeyman: capital cities reach a 100% catch rate at 75. Train Expert at 150 from Old Man Heming."
-                elseif skill < 225 then
-                    guidance = "Expert: Buy The Bass and You in Booty Bay for 1 gold. Fishing skill plus gear and lure bonuses must reach 225 for a 100% catch rate in Dustwallow Marsh or Stranglethorn Vale. Artisan requires skill 225 and character level 35."
-                elseif skill < 300 then
-                    guidance = "Artisan: Nat Pagle's quest requires character level 35 and skill 225. The guide has no complete 225-300 route."
-                else
-                    guidance = "Artisan skill cap reached. The guide has no detailed leveling route above 225."
+                local currentRank
+                for _, row in ipairs(trainingRankRows) do
+                    if skill >= row.rank.minimumSkill
+                        and (not row.rank.nextTraining or skill < row.rank.nextTraining) then
+                        currentRank = row.rank
+                        break
+                    end
                 end
-                guideSkillText:SetText(string.format("Fishing skill: %d\n%s", skill, guidance))
+                if currentRank then
+                    local nextStep = currentRank.nextTraining
+                        and string.format("  |  Next rank at %d", currentRank.nextTraining)
+                        or (skill >= currentRank.maximumSkill and "  |  Skill cap reached" or "")
+                    guideSkillText:SetText(string.format("Fishing skill: %d  |  %s (%s)%s",
+                        skill, currentRank.name, currentRank.range, nextStep))
+                elseif skill < EF.Data.FISHING_RANKS[1].minimumSkill then
+                    guideSkillText:SetText(string.format("Fishing skill: %d  |  Learn Apprentice at skill 1", skill))
+                else
+                    guideSkillText:SetText(string.format("Fishing skill: %d", skill))
+                end
             else
                 guideSkillText:SetText("Fishing skill is unavailable. Train Fishing to see your current bracket and next step.")
             end
@@ -1503,16 +1543,32 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             for _, row in ipairs(trainingRankRows) do
                 local isCurrent = skill and skill >= row.rank.minimumSkill
                     and (not row.rank.nextTraining or skill < row.rank.nextTraining)
+                local isComplete = skill and skill >= row.rank.maximumSkill and not isCurrent
+                local progress = skill and math.max(0, math.min(1,
+                    (skill - row.rank.minimumSkill) / (row.rank.maximumSkill - row.rank.minimumSkill))) or 0
+                row.progress:SetWidth(math.max(2, 292 * progress))
                 if isCurrent then
                     row.status:Show()
                     row.title:SetTextColor(1, 0.82, 0)
                     row.range:SetTextColor(1, 0.82, 0)
                     row.detail:SetTextColor(1, 1, 1)
+                    row.status:SetText("CURRENT")
+                    row.status:SetTextColor(1, 0.82, 0)
+                    row.progress:SetColorTexture(0.96, 0.68, 0.14, 1)
+                elseif isComplete then
+                    row.status:Show()
+                    row.status:SetText("DONE")
+                    row.status:SetTextColor(0.55, 0.78, 0.38)
+                    row.title:SetTextColor(0.72, 0.82, 0.62)
+                    row.range:SetTextColor(0.72, 0.82, 0.62)
+                    row.detail:SetTextColor(0.78, 0.82, 0.74)
+                    row.progress:SetColorTexture(0.42, 0.7, 0.28, 0.7)
                 else
                     row.status:Hide()
                     row.title:SetTextColor(0.72, 0.72, 0.72)
                     row.range:SetTextColor(0.72, 0.72, 0.72)
                     row.detail:SetTextColor(0.78, 0.78, 0.78)
+                    row.progress:SetColorTexture(0.4, 0.34, 0.22, 0.55)
                 end
             end
 
