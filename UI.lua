@@ -234,8 +234,17 @@ local function SetTomTomWaypoint(spot, label)
 end
 
 local function OpenFishingMap(mapID)
-    if not WorldMapFrame then return end
+    if not WorldMapFrame then return false end
     if type(WorldMapFrame.SetMapID) == "function" then
+        if not C_Map or type(C_Map.GetMapArtLayers) ~= "function" then
+            print("EasyFishing: the World Map cannot validate map data for this location.")
+            return false
+        end
+        local ok, layers = pcall(C_Map.GetMapArtLayers, mapID)
+        if not ok or type(layers) ~= "table" or #layers == 0 then
+            print("EasyFishing: the World Map has no map layers for map ID " .. tostring(mapID) .. ".")
+            return false
+        end
         WorldMapFrame:SetMapID(mapID)
     end
     if type(ShowUIPanel) == "function" then
@@ -243,6 +252,7 @@ local function OpenFishingMap(mapID)
     else
         WorldMapFrame:Show()
     end
+    return true
 end
 
 local function ShareFishingLocation()
@@ -2282,9 +2292,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             for _, trainer in ipairs(EF.Data.FISHING_NPCS) do
                 local matchesFaction = trainerFilter == "All" or trainer.side == trainerFilter
                     or (trainer.side == "Both" and trainerFilter ~= "Neutral")
-                local searchText = string.lower(string.format("%s %s %s %s %s %d",
+                local searchText = string.lower(string.format("%s %s %s %s %s %s",
                     trainer.name, trainer.role, trainer.side,
-                    trainer.location or "", trainer.zone, trainer.level))
+                    trainer.location or "", trainer.zone, trainer.levelRange or tostring(trainer.level)))
                 if matchesFaction and (query == "" or string.find(searchText, query, 1, true)) then
                     table.insert(trainers, trainer)
                 end
@@ -2362,7 +2372,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 row:SetPoint("TOPLEFT", trainerContent, "TOPLEFT", 0, -((index - 1) * 40))
                 SetStripedRow(row.background, index)
                 row.name:SetText(trainer.name)
-                row.role:SetText(string.format("%s  |  Level %d", trainer.role, trainer.level))
+                row.role:SetText(string.format("%s  |  Level %s", trainer.role,
+                    trainer.levelRange or tostring(trainer.level)))
                 row.side:SetText(trainer.side == "Both" and "Shared" or trainer.side)
                 if trainer.side == "Alliance" then
                     row.side:SetTextColor(0.45, 0.72, 1)
@@ -2409,13 +2420,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     end)
                     row.waypointButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 else
-                    row.waypointButton:SetText("No map")
+                    row.waypointButton:SetText("No coords")
                     row.waypointButton:Disable()
                     row.waypointButton:SetScript("OnClick", nil)
                     row.waypointButton:SetScript("OnEnter", function(button)
                         GameTooltip:SetOwner(button, "ANCHOR_LEFT")
                         GameTooltip:SetText("Waypoint unavailable")
-                        GameTooltip:AddLine("No verified map ID and coordinates are available for this NPC.",
+                        GameTooltip:AddLine("No verified map coordinates are available for this NPC.",
                             0.75, 0.75, 0.75, true)
                         GameTooltip:Show()
                     end)
@@ -2461,7 +2472,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             source:SetWidth(PAGE_CONTENT_WIDTH)
             source:SetJustifyH("LEFT")
             source:SetWordWrap(true)
-            source:SetText("Source: Wowhead Forever Fishing and Camping guides, Patch 1.60.1. Trainer coordinates are zone-map estimates. Forever is in beta; routes and data may change.")
+            source:SetText("Sources: Wowhead Forever Fishing and Camping guides, Patch 1.60.1; Warcraft Wiki Classic NPC references. Coordinates are source-reported estimates. Forever is in beta; routes and data may change.")
         end
         AddGuideSource(guidePage)
         AddGuideSource(guideTrainersPage)

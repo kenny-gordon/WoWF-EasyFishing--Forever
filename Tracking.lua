@@ -410,6 +410,22 @@ local function FormatFishingTime(seconds)
     return string.format("%02d:%02d:%02d", hours, minutes, remainingSeconds)
 end
 
+local function GetFishingSessionElapsed()
+    if not fishingSession then return 0 end
+    local elapsed = tonumber(fishingSession.elapsedSeconds) or 0
+    if isFishing and fishingSession.activeSince then
+        elapsed = elapsed + math.max(0, GetTime() - fishingSession.activeSince)
+    end
+    return elapsed
+end
+
+local function AccumulateActiveFishingTime()
+    if not fishingSession or not fishingSession.activeSince then return end
+    fishingSession.elapsedSeconds = (tonumber(fishingSession.elapsedSeconds) or 0)
+        + math.max(0, GetTime() - fishingSession.activeSince)
+    fishingSession.activeSince = nil
+end
+
 local function UpdateFishWatcher()
     if not fishingSession or not EasyFishingDB or not EasyFishingDB.showFishWatcher then
         fishWatcher:Hide()
@@ -425,8 +441,7 @@ local function UpdateFishWatcher()
     fishWatcherStatus:SetText(paused and "Paused" or (InCombatLockdown() and "In combat"
         or (isFishing and "Fishing" or (EF.IsLootOpen() and "Looting" or "Idle"))))
     fishWatcherStatus:SetTextColor(paused and 0.6 or 1, paused and 0.6 or 1, paused and 0.6 or 1)
-    local sessionEnd = isFishing and GetTime() or (fishingSession.lastActivityAt or GetTime())
-    local elapsedSeconds = math.max(1, sessionEnd - fishingSession.startedAt)
+    local elapsedSeconds = math.max(1, GetFishingSessionElapsed())
     local itemsPerHour = fishingSession.totalItems * 3600 / elapsedSeconds
     local fishingSkill = EF.GetFishingSkill()
     fishWatcherMetricValues[1]:SetText(fishingSkill and tostring(fishingSkill) or "?")
@@ -464,8 +479,8 @@ local function EndFishingSession()
         fishingSessionEndTimer = nil
     end
     if fishingSession then
-        local endedAt = fishingSession.lastActivityAt or GetTime()
-        local duration = math.max(0, endedAt - fishingSession.startedAt)
+        AccumulateActiveFishingTime()
+        local duration = GetFishingSessionElapsed()
         local stats = EnsureFishingStats()
         local zoneStats = EnsureZoneFishingStats(stats, fishingSession.zone)
         stats.totalFishingSeconds = stats.totalFishingSeconds + duration
@@ -492,8 +507,7 @@ end
 
 local function GetFishingSessionTime()
     if not fishingSession then return nil, 0 end
-    local endedAt = isFishing and GetTime() or fishingSession.lastActivityAt
-    return fishingSession.zone, math.max(0, endedAt - fishingSession.startedAt)
+    return fishingSession.zone, GetFishingSessionElapsed()
 end
 
 local function StartFishingSession()
@@ -511,24 +525,23 @@ local function StartFishingSession()
         stats.totalSessions = stats.totalSessions + 1
         zoneStats.sessions = zoneStats.sessions + 1
         fishingSession = {
-            startedAt = GetTime(),
+            elapsedSeconds = 0,
             zone = zoneName,
             totalItems = 0,
             lastCatch = nil,
             itemsByID = {},
             casts = 0,
             skillUps = 0,
-            lastActivityAt = GetTime(),
             lastSkill = GetFishingSkill(),
         }
     end
     local castTime = GetTime()
     local stats = EnsureFishingStats()
     local sessionZoneStats = EnsureZoneFishingStats(stats, fishingSession.zone)
+    fishingSession.activeSince = castTime
     fishingSession.casts = fishingSession.casts + 1
     fishingSession.lootRecordedForCast = false
     fishingSession.lootRecordedSlots = {}
-    fishingSession.lastActivityAt = castTime
     sessionZoneStats.casts = sessionZoneStats.casts + 1
     stats.totalCasts = stats.totalCasts + 1
     stats.rateTrackedCasts = stats.rateTrackedCasts + 1
@@ -630,7 +643,6 @@ local function RecordFishingLoot()
     end
 
     if successfulCast then
-        fishingSession.lastActivityAt = GetTime()
         if not fishingSession.lootRecordedForCast then
             fishingSession.lootRecordedForCast = true
             stats.successfulCasts = stats.successfulCasts + 1
@@ -709,14 +721,17 @@ end
 
 soundFrame:SetScript("OnEvent", function(_, event, unit)
     if event == "PLAYER_LOGOUT" then
+        AccumulateActiveFishingTime()
         isFishing = false
         RestoreFishingSoundSettings()
+        EndFishingSession()
         return
     elseif event == "LOOT_OPENED" or event == "LOOT_READY" then
         RecordFishingLoot()
         return
     elseif event == "PLAYER_EQUIPMENT_CHANGED" then
         if fishingSession and not EF.IsFishingPoleEquipped() then
+            AccumulateActiveFishingTime()
             isFishing = false
             RestoreFishingSoundSettings()
             EndFishingSession()
@@ -724,7 +739,7 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
         return
     elseif event == "PLAYER_STARTED_MOVING" then
         if fishingSession then
-            fishingSession.lastActivityAt = GetTime()
+            AccumulateActiveFishingTime()
             isFishing = false
             RestoreFishingSoundSettings()
             UpdateFishWatcher()
@@ -752,13 +767,11 @@ soundFrame:SetScript("OnEvent", function(_, event, unit)
 
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         if not isFishing then return end
+        AccumulateActiveFishingTime()
         isFishing = false
         UpdateFishWatcher()
 
         RestoreFishingSoundSettings()
-        if fishingSession then
-            fishingSession.lastActivityAt = GetTime()
-        end
         ScheduleFishingSessionEnd()
 
     end

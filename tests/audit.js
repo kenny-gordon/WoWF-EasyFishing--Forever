@@ -194,10 +194,12 @@ end
 function GetLootSlotInfo(slot) return nil,slot==2 and 'Other Fish' or 'Fish',slot==2 and 1 or 2 end
 function ChatFrame_OpenChat(text) ChatText=text end
 function CreateVector2D(x,y) return {x=x,y=y,GetXY=function(self) return self.x,self.y end} end
+MissingMapArt={}
 C_Map = {
     GetBestMapForUnit=function() return 1438 end,
     GetPlayerMapPosition=function() return CreateVector2D(MapX or 0.5,0.5) end,
     GetWorldPosFromMapPos=function(_,position) return 1,CreateVector2D(position.x*10000,position.y*10000) end,
+    GetMapArtLayers=function(mapID) if MissingMapArt[mapID] then return nil end; return {{}} end,
     CanSetUserWaypointOnMap=function() return WaypointAllowed ~= false end,
     SetUserWaypoint=function(point) Waypoint=point; return true end,
     GetUserWaypointHyperlink=function() return '|Hworldmap:'..Waypoint.mapID..'|h[Location]|h' end,
@@ -336,7 +338,48 @@ for _,frame in ipairs(Frames) do
             'every waypoint button must stay inside the 600px scroll child')
     end
 end
-assert(npcRowCount==25)
+assert(npcRowCount==35)
+local gubberFound, hemingFound = false, false
+for _,frame in ipairs(Frames) do
+    if frame.waypointButton and frame.name and frame.name.text=='Gubber Blump' then
+        assert(frame.waypointButton.enabled and frame.coordinates.text=='36.1, 44.9')
+        gubberFound=true
+    elseif frame.waypointButton and frame.name and frame.name.text=='Old Man Heming' then
+        assert(frame.waypointButton.enabled and frame.coordinates.text=='27.7, 76.6')
+        hemingFound=true
+    end
+end
+assert(gubberFound and hemingFound)
+local suppliedPins={
+    ['Baelann Swiftcurrent']={16593,63.2,75.6},
+    ['Fenn Fairweather']={16593,45,48.4},
+    Gikkix={1446,66.6,22.2},
+    ['Harn Longcast']={1412,47.4,55.4},
+    ['Hunter Moore']={1424,51.0,59.8},
+    Kilxx={1413,62.8,38.2},
+    Krix={16594,79.2,54.6},
+    ['Old Man Heming']={1434,27.7,76.6},
+    Wigcik={1434,27.4,76.8},
+}
+local npcByName={}
+for _,npc in ipairs(Addon.Data.FISHING_NPCS) do npcByName[npc.name]=npc end
+for name,pin in pairs(suppliedPins) do
+    local npc=npcByName[name]
+    assert(npc and npc.mapID==pin[1] and npc.x==pin[2] and npc.y==pin[3],
+        'NPC map data mismatch: '..name)
+end
+local tournamentNPCs={}
+for _,npc in ipairs(Addon.Data.FISHING_NPCS) do tournamentNPCs[npc.name]=npc end
+for _,name in ipairs({'Riggle Bassbait','Fishbot 5000','Jang'}) do
+    assert(tournamentNPCs[name] and tournamentNPCs[name].zone=='Stranglethorn Vale')
+end
+local tournamentReward
+for _,reward in ipairs(Addon.Data.FISHING_QUEST_REWARDS) do
+    if reward.questID==8193 then tournamentReward=reward end
+end
+assert(tournamentReward and tournamentReward.reward:find('Pole and Extravagant Extravaganza Coin',1,true)
+    and not tournamentReward.reward:find('or Hook',1,true)
+    and tournamentReward.sourceLabel=='Weekly; first 50 finishers')
 local npcWaypoint=false
 for _,frame in ipairs(Frames) do
     if frame.waypointButton and frame.width==600 then
@@ -354,6 +397,12 @@ end
 assert(npcWaypoint and Waypoint.x>=0 and Waypoint.x<=1 and Waypoint.y>=0 and Waypoint.y<=1)
 assert(MapOpened==WorldMapFrame and WorldMapFrame.mapID==Waypoint.mapID and WorldMapFrame:IsShown(),
     'NPC waypoint opens the map at the waypoint location')
+local openedMapID=WorldMapFrame.mapID
+MissingMapArt[16594]=true
+assert(Addon.SetFishingWaypoint({mapID=16594,x=0.792,y=0.546},'Krix'))
+assert(WorldMapFrame.mapID==openedMapID and MapOpened==WorldMapFrame,
+    'maps without art layers must not be passed to WorldMapFrame:SetMapID')
+MissingMapArt[16594]=nil
 assert(RegisteredSplash==NamedFrames.EasyFishingOptionsPanel)
 assert(RegisteredSplash~=RegisteredSettings and RegisteredSplash.name=='EasyFishing: Forever')
 Addon.OpenOptions('splash')
@@ -579,6 +628,13 @@ assert(#journal==1 and journal[1].id=='6291' and journal[1].count==2)
 assert(journal[1].timeBuckets[2]==2 and journal[1].datesByDay['2026-10-02']==2)
 SlashCmdList.EASYFISHING('journal'); Addon.RefreshJournal()
 assert(NamedFrames.EasyFishingJournalPage:IsShown())
+assert(NamedFrames.EasyFishingJournalLocationScroll.scrollChild.width==342)
+for _,frame in ipairs(Frames) do
+    if frame.kind=='Button' and frame.parent==NamedFrames.EasyFishingJournalLocationScroll.scrollChild then
+        assert(frame.width==338 and frame.fontString.width==322,
+            'journal location buttons must stay inside the scroll child gutter')
+    end
+end
 assert(type(Addon.ShowFishAlmanacMap)=='function', 'almanac map action is exported during UI load')
 local almanacFishRow
 for _,frame in ipairs(Frames) do
@@ -701,9 +757,27 @@ local _, sessionTimeBeforeIdle=Addon.GetFishingSessionTime()
 Clock=Clock+60
 local _, sessionTimeDuringIdle=Addon.GetFishingSessionTime()
 assert(sessionTimeDuringIdle==sessionTimeBeforeIdle, 'session duration freezes while idle after movement')
-Clock=Clock+60; movementEndTimer.callback()
+Cast()
+local _, sessionTimeAfterResume=Addon.GetFishingSessionTime()
+assert(math.abs(sessionTimeAfterResume-sessionTimeBeforeIdle-10)<0.0001,
+    'resuming within the idle grace period must not re-add the idle interval')
+Emit('PLAYER_STARTED_MOVING')
+EasyFishingDB.showFishWatcher=false; Addon.UpdateFishWatcher()
+EasyFishingDB.showMinimapButton=false; Addon.UpdateMinimapButton()
+assert(not Addon.FishWatcher:IsShown())
+if BrokerMode==2 then assert(IconHidden) else assert(not NamedFrames.EasyFishingMinimapButton:IsShown()) end
+assert(Addon.ResetAccountSettings())
+assert(EasyFishingDB.showFishWatcher and EasyFishingDB.showMinimapButton)
+assert(Addon.FishWatcher:IsShown(), 'reset preferences restores watcher visibility during an active session')
+assert(not Addon.GetCharacterDB().minimap.hide)
+if BrokerMode==2 then assert(not IconHidden) else assert(NamedFrames.EasyFishingMinimapButton:IsShown()) end
+local resumedIdleTimer=Timers[#Timers]
+Clock=Clock+60
+local _, sessionTimeAfterResumeIdle=Addon.GetFishingSessionTime()
+assert(sessionTimeAfterResumeIdle==sessionTimeAfterResume, 'resumed session time freezes while idle')
+Clock=Clock+60; resumedIdleTimer.callback()
 assert(not Addon.FishWatcher:IsShown(), 'idle timeout ends the fishing session')
-assert(Addon.EnsureFishingStats().zones['Zone B'].casts==1)
+assert(Addon.EnsureFishingStats().zones['Zone B'].casts==2)
 Cast()
 PoleEquipped=false; Emit('PLAYER_EQUIPMENT_CHANGED')
 local endedSessionZone=Addon.GetFishingSessionTime()

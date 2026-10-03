@@ -511,6 +511,9 @@ local function ResetAccountSettings()
     SetFishingPaused(false)
     if EF.RefreshOptions then EF.RefreshOptions() end
     if EF.UpdateFishingControls then EF.UpdateFishingControls() end
+    if EF.UpdateFishingSoundSettings then EF.UpdateFishingSoundSettings() end
+    if EF.UpdateFishWatcher then EF.UpdateFishWatcher() end
+    if EF.UpdateMinimapButton then EF.UpdateMinimapButton() end
     return true
 end
 

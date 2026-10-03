@@ -118,7 +118,7 @@ function EF.CreateJournalPage(window)
     locationScroll:SetPoint("TOPLEFT", whereButton, "BOTTOMLEFT", 0, -10)
     locationScroll:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", -32, 60)
     local locationContent = CreateFrame("Frame", nil, locationScroll)
-    locationContent:SetSize(392, 1)
+    locationContent:SetSize(342, 1)
     locationScroll:SetScrollChild(locationContent)
     local caveat = AddText(page, "GameFontDisableSmall", 620, page, "BOTTOMLEFT", 16, 28)
     caveat:SetText("Recorded catches are observations, not guaranteed availability. Dates use UTC; time buckets use server time.")
@@ -223,8 +223,8 @@ function EF.CreateJournalPage(window)
             local row = locationRows[index]
             if not row then
                 row = CreateFrame("Button", nil, locationContent, "UIPanelButtonTemplate")
-                row:SetSize(390, 38)
-                row:GetFontString():SetWidth(374)
+                row:SetSize(338, 38)
+                row:GetFontString():SetWidth(322)
                 row:GetFontString():SetWordWrap(false)
                 locationRows[index] = row
             end

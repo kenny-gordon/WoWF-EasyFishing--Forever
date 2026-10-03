@@ -60,7 +60,26 @@ Apprentice and Journeyman trainers are listed in major cities and some towns nea
 | Neutral (Forever locations) | Baelann Swiftcurrent | Valanaar, Zephras Isle | 63.2, 75.6 |
 | Neutral (Forever locations) | Krix | Powderfuse Port, Riverglades | 79.2, 54.6 |
 
-The guide lists Myizz Luckycatch under both faction trainer lists. The three neutral locations are the Forever-specific trainer entries shown on the guide. Wowhead's Fishing skill NPC tab also includes fishermen who are not trainers; it lists Hunter Moore as a level 31 Fisherman in Hillsbrad Foothills but provides no coordinates.
+The guide lists Myizz Luckycatch under both faction trainer lists. The three neutral locations are the Forever-specific trainer entries shown on the guide. Wowhead's Fishing skill NPC tab also includes fishermen who are not trainers; Hunter Moore is listed as a level 31 Fisherman near the Southshore coast in Hillsbrad Foothills, with map coordinates 51.0, 59.8.
+
+### Additional Classic NPCs
+
+The NPC directory also includes Azeroth fishing vendors and quest contacts, not only the NPCs in the Forever trainer table:
+
+| NPC | Role | Location | Coordinates |
+|---|---|---|---|
+| Old Man Heming | Fishing supplies; sells Expert Fishing - The Bass and You | The Happy Bobber, lower Booty Bay | 27.7, 76.6 |
+| Gubber Blump | Fishing trainer and supplies | Auberdine, Darkshore | 36.1, 44.9 |
+| Harn Longcast | Fishing supplies | Bloodhoof Village, Mulgore | 47.4, 55.4 |
+| Kilxx | Fish and fishing-supplies vendor | Ratchet, The Barrens | 62.8, 38.2 |
+| Gikkix | Fish and cooking vendor | Steamwheedle Port, Tanaris | 66.6, 22.2 |
+| Wigcik | Fish vendor | Booty Bay, Stranglethorn Vale | 27.4, 76.8 |
+| Nat Pagle | Fishing trainer and Artisan quest contact | Nat's Landing, Dustwallow Marsh | 58.6, 60.2 |
+| Riggle Bassbait | Stranglethorn Fishing Extravaganza organizer and contest turn-in | Booty Bay docks | Not verified for the Forever map |
+| Fishbot 5000 | Rare tournament fish turn-ins | Booty Bay | Not verified for the Forever map |
+| Jang | Tastyfish turn-in | Booty Bay | Not verified for the Forever map |
+
+The NPC roles and town locations are cross-referenced with Warcraft Wiki Classic NPC pages; the added Forever map IDs and coordinates above are the updated in-game map dataset. Baelann Swiftcurrent and Fenn Fairweather use Forever map 16593; Krix uses map 16594. The Stranglethorn event pages identify Riggle, Fishbot, and Jang as contest contacts; their page coordinates use the later Cape of Stranglethorn map and are not copied to the Classic-zone map. Warcraft Wiki content is licensed CC BY-SA 4.0. These records do not imply that every NPC or vendor stock is Forever-exclusive.
 
 ## Artisan Quest
 
@@ -131,7 +150,7 @@ The guide documents two Forever changes to Master Angler:
 - The first 50 players to complete the quest win, rather than only the first player.
 - The quest always rewards an Arcanite Fishing Pole and an Extravagant Extravaganza Coin.
 
-The coin can be exchanged for one of these items: Hook of the Master Angler, Surfer Shoes, Master Angler's Fishing Hat, Empty Fish Bucket, or Bitter Baitling.
+The coin can be exchanged for one of these items: Hook of the Master Angler, Surfer Shoes, Master Angler's Fishing Hat, Empty Fish Bucket, or Bitter Baitling. The Hook is a coin-purchase option, not an alternative quest reward. The Classic tournament contact roles are cross-referenced with the [Stranglethorn Fishing Extravaganza](https://warcraft.wiki.gg/wiki/Stranglethorn_Fishing_Extravaganza), [Riggle Bassbait](https://warcraft.wiki.gg/wiki/Riggle_Bassbait), [Fishbot 5000](https://warcraft.wiki.gg/wiki/Fishbot_5000), and [Jang](https://warcraft.wiki.gg/wiki/Jang) pages; their tournament details may differ in Forever.
 
 ## New Fishing Recipes
 
