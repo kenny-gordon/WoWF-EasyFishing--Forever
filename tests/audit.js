@@ -251,7 +251,7 @@ else
     function InterfaceOptionsFrame_OpenToCategory(frame) OpenedSettings=frame; InterfaceOptionsFrame:Show() end
 end
 function GetAddOnMetadata(_,key)
-    if key=='Version' then return '0.1.0' end
+    if key=='Version' then return '0.2.0' end
     if key=='Author' then return 'Meshoot Youtank' end
 end
 function FindButton(label)

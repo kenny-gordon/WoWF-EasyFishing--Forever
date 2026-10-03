@@ -2,7 +2,7 @@
 ## Title: EasyFishing: Forever
 ## Notes: Fishing click-to-cast, lures, catch tracking, locations, and a Forever fishing guide.
 ## Author: Meshoot Youtank
-## Version: 0.1.0
+## Version: 0.2.0
 ## IconTexture: Interface\AddOns\EasyFishing\EasyFishing.tga
 ## SavedVariables: EasyFishingDB
 ## SavedVariablesPerCharacter: EasyFishingCharDB

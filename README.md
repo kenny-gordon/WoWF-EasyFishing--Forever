@@ -9,7 +9,7 @@ A quality-of-life fishing companion for **WoW Forever**. Cast with a mouse click
 ## Features
 
 ### Fishing Window
-`/ef` opens a dedicated EasyFishing window with Locations, Training, NPCs, Gear & Rewards, Statistics, and Journal tabs. It reopens the last tab used during the current login. Drag the title bar to move it; its position is saved per character. Close it with Escape or the close button. The window scales down on smaller screens, and the Fish Watcher remains a separate session overlay.
+`/ef` opens a dedicated EasyFishing window with Locations, Training, NPCs, Gear & Rewards, Statistics, and Journal tabs. It reopens the last tab used during the current login. Drag the title bar to move it; its position is saved per character. Close it with Escape or the close button. The window scales down on smaller screens, and the compact fishing dock expands in place to show session details.
 
 The window's **Options** button opens Blizzard's addon settings. Those settings contain preferences and outfit selection, not the guide or catch-history tools. **Open EasyFishing** in Options brings you back to the fishing window.
 
@@ -152,7 +152,7 @@ After updating the addon on the Forever client, enable Lua errors (`/console scr
 5. Open `/ef`, switch through every tab, drag the window, and close it with Escape. Reopen it to check the selected tab, then `/reload` to check its position. Verify `/ef options` contains preferences only and **Open EasyFishing** returns to the tools. Check the window at your normal UI scale and a smaller resolution.
 6. Bind the fishing key, then test casting and applying a lure. Check both global action-button key-down preferences. Verify Pause, movement, other spells, combat, and an open loot window prevent EasyFishing casts; enter combat with a mouse binding armed and check normal mouse input still works.
 7. Test a catch with your usual fast-loot addon enabled. Check Journal search, location waypoints, dates, and an EFS3 export/import round trip. Verify older EFS2 imports still work. Test launcher clicks, dragging, visibility options, and broker integration when available.
-8. Check the watcher's empty/latest/top-catch rows, long item names, tooltips, close button, and selected-fish journal action. Verify its checkbox stays synchronized. Leave Statistics or a guide page open while fishing or changing bags; verify values refresh. Resize the client and check the tool window refits. Check transfer messages stay above the buttons and the dialog closes when the main window closes.
+8. Check the watcher's empty/latest/top-catch rows, long item names, tooltips, and selected-fish journal action. Use **Compact** to collapse Details and verify the Options checkbox stays synchronized. Leave Statistics or a guide page open while fishing or changing bags; verify values refresh. Resize the client and check the tool window refits. Check transfer messages stay above the buttons and the dialog closes when the main window closes.
 
 ## Feature Direction
 
