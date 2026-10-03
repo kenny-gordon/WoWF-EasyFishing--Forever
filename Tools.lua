@@ -83,6 +83,21 @@ local function GetFishAlmanacEntries()
     return fishList
 end
 
+local function FormatAlmanacCookingUse(cookingUse)
+    if not cookingUse then return nil end
+    local description
+    if cookingUse.fishingBonus then
+        description = string.format("%s grants +%d Fishing for %d min",
+            cookingUse.name, cookingUse.fishingBonus, cookingUse.durationMinutes or 15)
+    elseif cookingUse.effect then
+        description = cookingUse.name .. ": " .. cookingUse.effect
+    end
+    if description and cookingUse.minimumCharacterLevel then
+        description = description .. string.format(" (character level %d+)", cookingUse.minimumCharacterLevel)
+    end
+    return description
+end
+
 function EF.CreateJournalPage(window)
     local page = CreateFrame("Frame", "EasyFishingJournalPage", window)
     page:Hide()
@@ -151,14 +166,24 @@ function EF.CreateJournalPage(window)
         title:SetWordWrap(false)
         if not fish.caught then
             local entry = fish.almanac
-            summary:SetText(string.format("No personal catches yet\nReported waters: %s\n%s\nSource: %s. Exact hotspots appear after recorded catches.",
-                entry.zones or entry.zone, entry.hint, entry.source))
+            local details = { "No personal catches yet", "Reported waters: " .. (entry.zones or entry.zone) }
+            if entry.habitat then table.insert(details, "Water: " .. entry.habitat) end
+            if entry.hint then table.insert(details, entry.hint) end
+            local cookingUse = FormatAlmanacCookingUse(entry.cookingUse)
+            if cookingUse then table.insert(details, "Cooking: " .. cookingUse) end
+            table.insert(details, "Source: " .. entry.source .. ". Exact hotspots appear after recorded catches.")
+            summary:SetText(table.concat(details, "\n"))
             locationContent:SetHeight(1)
             UpdateScrollLayout(locationScroll)
             return
         end
         local details = { string.format("Character catches: %d  |  At saved locations: %d\n%d locations",
             fish.lifetimeCount, fish.locationCount, #fish.locations) }
+        if fish.almanac and fish.almanac.habitat then
+            table.insert(details, "Reported habitat: " .. fish.almanac.habitat)
+        end
+        local cookingUse = fish.almanac and FormatAlmanacCookingUse(fish.almanac.cookingUse)
+        if cookingUse then table.insert(details, "Cooking: " .. cookingUse) end
         local zoneCounts, zones = {}, {}
         for _, entry in ipairs(fish.locations) do
             zoneCounts[entry.zone] = (zoneCounts[entry.zone] or 0) + entry.count
@@ -251,9 +276,10 @@ function EF.CreateJournalPage(window)
         local query = (search:GetText() or ""):lower():match("^%s*(.-)%s*$")
         local fishList = {}
         for _, fish in ipairs(GetFishAlmanacEntries()) do
-            local habitatText = fish.almanac
-                and (fish.almanac.zone .. " " .. fish.almanac.habitat .. " "
-                    .. (fish.almanac.zones or "") .. " " .. fish.almanac.hint) or ""
+            local habitatText = fish.almanac and table.concat({
+                fish.almanac.zone or "", fish.almanac.habitat or "", fish.almanac.zones or "",
+                fish.almanac.hint or "", FormatAlmanacCookingUse(fish.almanac.cookingUse) or "",
+            }, " ") or ""
             if query == "" or fish.name:lower():find(query, 1, true)
                 or fish.id:find(query, 1, true) or habitatText:lower():find(query, 1, true) then
                 table.insert(fishList, fish)

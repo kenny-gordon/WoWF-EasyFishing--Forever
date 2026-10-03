@@ -725,6 +725,16 @@ assert(#journal==1 and journal[1].id=='6291' and journal[1].count==2)
 assert(journal[1].timeBuckets[2]==2 and journal[1].datesByDay['2026-10-02']==2)
 SlashCmdList.EASYFISHING('journal'); Addon.RefreshJournal()
 assert(NamedFrames.EasyFishingJournalPage:IsShown())
+local almanacByID={}
+for _,entry in ipairs(Addon.Data.FISH_ALMANAC) do almanacByID[entry.id]=entry end
+assert(#Addon.Data.FISH_ALMANAC==37)
+assert(almanacByID[13890] and almanacByID[13890].cookingUse.itemID==286152
+    and almanacByID[13890].zones:find('Alterac Valley',1,true))
+assert(almanacByID[6317].cookingUse.fishingBonus==3
+    and almanacByID[6308].cookingUse.fishingBonus==8
+    and almanacByID[6362].cookingUse.fishingBonus==12
+    and almanacByID[13758].cookingUse.fishingBonus==18)
+for _,itemID in ipairs({12238,6299,13757,6458}) do assert(almanacByID[itemID]) end
 assert(NamedFrames.EasyFishingJournalLocationScroll.scrollChild.width==342)
 for _,frame in ipairs(Frames) do
     if frame.kind=='Button' and frame.parent==NamedFrames.EasyFishingJournalLocationScroll.scrollChild then
@@ -739,6 +749,31 @@ for _,frame in ipairs(Frames) do
 end
 assert(almanacFishRow and almanacFishRow.caught==false
     and almanacFishRow.nameText.text=='Feralas Ahi', 'uncaught silhouettes retain their fish names')
+NamedFrames.EasyFishingJournalSearch:SetText('13890')
+NamedFrames.EasyFishingJournalSearch.scripts.OnTextChanged()
+local platedFishRow
+for _,frame in ipairs(Frames) do
+    if frame.kind=='Button' and frame.fishID=='13890' then platedFishRow=frame end
+end
+assert(platedFishRow and platedFishRow.nameText.text=='Raw Plated Armorfish')
+platedFishRow.scripts.OnClick(platedFishRow)
+local platedFoodReference=false
+for _,frame in ipairs(Frames) do
+    if frame.kind=='FontString' and frame.text:find('Plated Armorfish: +150 Armor',1,true) then
+        platedFoodReference=true
+    end
+end
+assert(platedFoodReference, 'Forever cooking use appears in uncaught fish details')
+NamedFrames.EasyFishingJournalSearch:SetText('+3 fishing')
+NamedFrames.EasyFishingJournalSearch.scripts.OnTextChanged()
+local lochFoodFishRow
+for _,frame in ipairs(Frames) do
+    if frame.kind=='Button' and frame.fishID=='6317' then lochFoodFishRow=frame end
+end
+assert(lochFoodFishRow and lochFoodFishRow.nameText.text=='Raw Loch Frenzy',
+    'Forever cooking-bonus metadata is searchable')
+NamedFrames.EasyFishingJournalSearch:SetText('')
+NamedFrames.EasyFishingJournalSearch.scripts.OnTextChanged()
 almanacFishRow.scripts.OnClick(almanacFishRow)
 NamedFrames.EasyFishingJournalWhereButton.scripts.OnClick()
 assert(WorldMapFrame.mapID==1444 and MapOpened==WorldMapFrame,

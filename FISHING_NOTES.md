@@ -1,6 +1,6 @@
 # WoW Forever Fishing Research Notes
 
-Last checked: 2026-10-02
+Last checked: 2026-10-04
 
 This is a living reference for fishing-related content documented for WoW Forever.
 
@@ -19,6 +19,16 @@ No Blizzard-authored WoW Forever fishing patch note was verified during this res
 - Fishing skill also unlocks three camp objects that can be placed at campfires: Fish Bowl, Fishing Rack, and Fishing Hut.
 - A fishing pole is the only tool required. Basic poles are sold by Trade Supplies and Fishing Supplies vendors. Equip a pole, cast Fishing while facing water, then right-click the bobber when it splashes.
 - The guide identifies no race with a direct Fishing racial bonus. It calls out Shaman utility from Far Sight and Water Walking for locating and reaching schools, and notes Hunters can feed many raw fish to pets.
+
+### Forever Almanac Findings (2026-10-04)
+
+The Wowhead Forever Fishing guide is labeled Patch 1.60.1 and updated 2026-10-03. Its Forever item page marks **Raw Plated Armorfish** (13890) as new in Forever and reports catches in Eastern Plaguelands, Deadwind Pass, Feralas, Winterspring, Silithus, and Alterac Valley. The raw item is a cooking reagent; its cooked Plated Armorfish meal requires character level 35 and grants +150 Armor for 15 minutes and +5% experience from kills.
+
+The guide also lists four fish-derived Forever foods that temporarily improve Fishing: Loch Frenzy Delight (+3 for 15 minutes, character level 5; Raw Loch Frenzy), Bristle Whisker Catfish (+8, level 15; Raw Bristle Whisker Catfish), Rockscale Cod (+12, level 25; Raw Rockscale Cod), and Filet of Redgill (+18, level 35; Raw Redgill). Fillet of Frenzy (+5) uses Soft Frenzy Flesh rather than a caught fish and is not associated with an almanac catch. Spinefin Halibut (+18) uses Raw Spinefin Halibut, but its Forever database page lists that raw item as vendor-sourced rather than fished, so it is not seeded as a catch.
+
+Additional catchable Classic references added to the seed are Darkshore Grouper (12238; Darkshore sea, catchable outside its quest), Sickly Looking Fish (6299; Tirisfal/Silverpine freshwater and Undercity slime), Lightning Eel (13757; specific high-level waters), and Oil Covered Fish (6458; Sludge Fen and Windshear Crag, also a Gahz'ranka drop). Their presence in the almanac is Classic reference coverage, not a claim of Forever-exclusive content. The Wowhead Forever pages are secondary sources and warn the game is in beta; exact pool boundaries and availability remain unverified.
+
+Forever database references: [Raw Plated Armorfish](https://www.wowhead.com/forever/item=13890/raw-plated-armorfish), [cooked Plated Armorfish](https://www.wowhead.com/forever/item=286152/plated-armorfish), [Loch Frenzy Delight](https://www.wowhead.com/forever/item=6316/loch-frenzy-delight), [Bristle Whisker Catfish](https://www.wowhead.com/forever/item=4593/bristle-whisker-catfish), [Rockscale Cod](https://www.wowhead.com/forever/item=4594/rockscale-cod), [Filet of Redgill](https://www.wowhead.com/forever/item=13930/filet-of-redgill), and [Raw Spinefin Halibut](https://www.wowhead.com/forever/item=8959/raw-spinefin-halibut). Classic references: [Darkshore Grouper](https://warcraft.wiki.gg/wiki/Darkshore_Grouper), [Sickly Looking Fish](https://warcraft.wiki.gg/wiki/Sickly_Looking_Fish), [Lightning Eel](https://warcraft.wiki.gg/wiki/Lightning_Eel), and [Oil Covered Fish](https://warcraft.wiki.gg/wiki/Oil_Covered_Fish). Warcraft Wiki content is licensed CC BY-SA 4.0.
 
 ## Training and Trainers
 
