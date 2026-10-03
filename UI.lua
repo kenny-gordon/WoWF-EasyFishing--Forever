@@ -1945,15 +1945,15 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         local guideGearView = guideGearPage
 
         local trainingTitle = ContentHeading(
-            guideTrainingView, "Training and Leveling", guideTrainingView, "TOPLEFT", 0, 0, 300)
+            guideTrainingView, "Training and Leveling", guideTrainingView, "TOPLEFT", 0, 0, 290)
         local campTitle = ContentHeading(
-            guideTrainingView, "Lures and Campsite Crafts", guideTrainingView, "TOPLEFT", 320, 0, 300)
+            guideTrainingView, "Lures and Campsite Crafts", guideTrainingView, "TOPLEFT", 310, 0, 290)
 
         local trainingRankRows = {}
         for index, rank in ipairs(EF.Data.FISHING_RANKS) do
             local row = CreateFrame("Frame", nil, guideTrainingView)
             row.rank = rank
-            row:SetSize(300, 80)
+            row:SetSize(290, 80)
             row:SetPoint("TOPLEFT", trainingTitle, "BOTTOMLEFT", 0, -8 - ((index - 1) * 86))
 
             row.title = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -1972,14 +1972,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             row.detail = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
             row.detail:SetPoint("TOPLEFT", row.title, "BOTTOMLEFT", 0, -3)
-            row.detail:SetWidth(300)
+            row.detail:SetWidth(290)
             row.detail:SetJustifyH("LEFT")
             row.detail:SetWordWrap(true)
             row.detail:SetText(rank.detail)
 
             row.progressBack = row:CreateTexture(nil, "BACKGROUND")
             row.progressBack:SetColorTexture(0.20, 0.18, 0.13, 0.85)
-            row.progressBack:SetSize(292, 4)
+            row.progressBack:SetSize(282, 4)
             row.progressBack:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, -4)
 
             row.progress = row:CreateTexture(nil, "ARTWORK")
@@ -1993,7 +1993,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         for index, lure in ipairs(EF.Data.LURES) do
             local row = CreateFrame("Frame", nil, guideTrainingView)
             row.lure = lure
-            row:SetSize(300, 28)
+            row:SetSize(290, 28)
             row:SetPoint("TOPLEFT", campTitle, "BOTTOMLEFT", 0, -6 - ((index - 1) * 30))
             row:EnableMouse(true)
 
@@ -2004,7 +2004,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
-            row.name:SetWidth(185)
+            row.name:SetWidth(175)
             row.name:SetJustifyH("LEFT")
             row.name:SetWordWrap(false)
             row.name:SetText(lure.name)
@@ -2017,7 +2017,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
-            row.detail:SetWidth(185)
+            row.detail:SetWidth(175)
             row.detail:SetJustifyH("LEFT")
             row.detail:SetWordWrap(false)
             row.detail:SetText(string.format("+%d Fishing  |  Skill %d+", lure.bonus, lure.minimumSkill))
@@ -2035,13 +2035,13 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
         local campCraftTitle = ContentHeading(
-            guideTrainingView, "Campsite Recipes", lureRows[#lureRows], "BOTTOMLEFT", 0, -8, 300)
+            guideTrainingView, "Campsite Recipes", lureRows[#lureRows], "BOTTOMLEFT", 0, -8, 290)
 
         local campRows = {}
         for index, campItem in ipairs(EF.Data.FISHING_CAMP_ITEMS) do
             local row = CreateFrame("Frame", nil, guideTrainingView)
             row.campItem = campItem
-            row:SetSize(300, 28)
+            row:SetSize(290, 28)
             row:SetPoint("TOPLEFT", campCraftTitle, "BOTTOMLEFT", 0, -6 - ((index - 1) * 30))
             row:EnableMouse(true)
 
@@ -2052,7 +2052,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -1)
-            row.name:SetWidth(185)
+            row.name:SetWidth(175)
             row.name:SetJustifyH("LEFT")
             row.name:SetWordWrap(false)
             row.name:SetText(campItem.name)
@@ -2065,7 +2065,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
             row.detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
-            row.detail:SetWidth(185)
+            row.detail:SetWidth(175)
             row.detail:SetJustifyH("LEFT")
             row.detail:SetWordWrap(false)
             row.detail:SetText(string.format("Craft skill %d  |  %s", campItem.craftSkill, campItem.source))
@@ -2522,7 +2522,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 local isComplete = skill and skill >= row.rank.maximumSkill and not isCurrent
                 local progress = skill and math.max(0, math.min(1,
                     (skill - row.rank.minimumSkill) / (row.rank.maximumSkill - row.rank.minimumSkill))) or 0
-                row.progress:SetWidth(math.max(2, 312 * progress))
+                row.progress:SetWidth(math.max(2, 282 * progress))
                 if isCurrent then
                     row.status:Show()
                     row.title:SetTextColor(1, 0.82, 0)

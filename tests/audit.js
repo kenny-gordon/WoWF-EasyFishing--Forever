@@ -328,6 +328,12 @@ assert(EasyFishingDB.doubleClickDelay==0.1)
 NamedFrames.EasyFishingDelaySlider.scripts.OnValueChanged(NamedFrames.EasyFishingDelaySlider,0.4)
 Skill=75; MaxSkill=75; SlashCmdList.EASYFISHING('guide')
 for _,frame in ipairs(Frames) do
+    if frame.rank then
+        assert(frame.width==290 and frame.detail.width==290 and frame.progressBack.width==282)
+        assert(frame.progress.width<=frame.progressBack.width)
+    elseif frame.lure or frame.campItem then
+        assert(frame.width==290 and frame.name.width==175)
+    end
     if frame.rank and frame.rank.name=='Apprentice' then assert(frame.status.text=='AT CAP') end
     if frame.rank and frame.rank.name=='Journeyman' then assert(not frame.status.shown) end
 end
