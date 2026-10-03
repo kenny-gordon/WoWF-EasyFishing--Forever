@@ -515,18 +515,22 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 entry.button:SetEnabled(entry.key ~= selectedPage)
             end
         end
+        local tabWidths = { 102, 102, 80, 132, 102, 102 }
+        local tabX = 18
         for index, entry in ipairs(windowPages) do
             entry.frame:SetPoint("TOPLEFT", window, "TOPLEFT", 4, -78)
             entry.frame:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -4, 8)
             local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-            button:SetSize(102, 26)
+            local buttonWidth = tabWidths[index] or 102
+            button:SetSize(buttonWidth, 26)
             button:SetDisabledFontObject("GameFontNormal")
-            button:GetFontString():SetWidth(90)
+            button:GetFontString():SetWidth(buttonWidth - 12)
             button:GetFontString():SetWordWrap(false)
-            button:SetPoint("TOPLEFT", window, "TOPLEFT", 18 + (index - 1) * 106, -48)
+            button:SetPoint("TOPLEFT", window, "TOPLEFT", tabX, -48)
             button:SetText(entry.label)
             button:SetScript("OnClick", function() OpenFishingWindow(entry.key) end)
             entry.button = button
+            tabX = tabX + buttonWidth + 4
         end
         EF.OpenWindow = OpenFishingWindow
 
@@ -637,6 +641,8 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     EF.UpdateAutoInteractSetting()
                 elseif dbKey == "showFishWatcher" then
                     EF.UpdateFishWatcher()
+                elseif dbKey == "autoExpandFishWatcher" then
+                    EF.UpdateFishingControls()
                 elseif dbKey == "enableSound" then
                     EF.UpdateFishingSoundSettings()
                 elseif dbKey == "showFishingControls" then
@@ -791,10 +797,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             cbAutoLure, -4, "preferStrongestLure")
 
         local secTracking = SectionHeader("Tracking", cbStrongestLure, -10)
-        MakeCheckbox(
-            "Show Fish Watcher",
-            "Show the Watcher during an active fishing session. It hides when you move away or after two minutes without a cast.",
+        local cbWatcher = MakeCheckbox(
+            "Show Session Details",
+            "Enable the detailed session view. Use Details in the compact dock to open it.",
             secTracking, -4, "showFishWatcher")
+        MakeCheckbox(
+            "Auto-expand Details",
+            "Open session details automatically when fishing starts.",
+            cbWatcher, -4, "autoExpandFishWatcher")
 
         local secMovement = RightSectionHeader("Movement", -14)
         local cbDisableClickToMove = MakeCheckbox(

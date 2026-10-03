@@ -10,6 +10,7 @@ local pendingClearTimer = nil
 local clearBindingOnMouseUp = false
 local lootOpen = false
 local fishingPaused = false
+local activeFishingLureID = nil
 local clickDiagnostics = {
     mouseDowns = 0,
     mouseUps = 0,
@@ -28,6 +29,7 @@ local DB_DEFAULTS = {
     enableSound = true,
     disableClickToMoveWhileFishing = false,
     showFishWatcher = true,
+    autoExpandFishWatcher = false,
     doubleClickDelay = 0.4,
     doubleClickButton = "LeftButton",
     castClickMode = "DoubleClick",
@@ -464,6 +466,49 @@ local function PrepareCastAction(button)
     button:SetAttribute("spell", not lureID and GetFishingSpellName() or nil)
 end
 
+local function RememberAppliedLure(button)
+    if not button or not button.GetAttribute or button:GetAttribute("type") ~= "item" then return end
+    local item = button:GetAttribute("item")
+    activeFishingLureID = type(item) == "string" and tonumber(item:match("^item:(%d+)$")) or nil
+end
+
+local function GetFishingBonusStatus()
+    local gearBonus = 0
+    local equippedSlots = { DATA.MAIN_HAND_SLOT, 1, 8 }
+    for _, slotID in ipairs(equippedSlots) do
+        local itemID = type(GetInventoryItemID) == "function" and GetInventoryItemID("player", slotID)
+        if itemID then
+            for _, boost in ipairs(DATA.FISHING_BOOSTS) do
+                if boost.id == itemID and (boost.category == "Pole" or boost.category == "Gear") then
+                    gearBonus = gearBonus + (boost.bonus or 0)
+                    break
+                end
+            end
+        end
+    end
+
+    local hasMainHandEnchant, _, _, enchantID = GetWeaponEnchantInfo()
+    local appliedLure
+    if not hasMainHandEnchant then
+        activeFishingLureID = nil
+    else
+        for _, lure in ipairs(DATA.LURES) do
+            if lure.enchantID and lure.enchantID == enchantID then
+                activeFishingLureID = lure.id
+                break
+            end
+        end
+        for _, lure in ipairs(DATA.LURES) do
+            if lure.id == activeFishingLureID then
+                appliedLure = lure
+                break
+            end
+        end
+    end
+    return gearBonus, hasMainHandEnchant and appliedLure and appliedLure.bonus or nil,
+        appliedLure and appliedLure.name or nil
+end
+
 local function UpdateKeyboardCastAction()
     if InCombatLockdown() then return end
     if CanStartFishing() then
@@ -473,6 +518,7 @@ local function UpdateKeyboardCastAction()
     end
 end
 keyboardCastButton:SetScript("PreClick", UpdateKeyboardCastAction)
+keyboardCastButton:SetScript("PostClick", RememberAppliedLure)
 local GetMouseFishingStatus
 autoLureButton:SetScript("PreClick", function(self)
     clickDiagnostics.securePreClicks = clickDiagnostics.securePreClicks + 1
@@ -485,10 +531,13 @@ autoLureButton:SetScript("PreClick", function(self)
         clickDiagnostics.secureReadyClicks = clickDiagnostics.secureReadyClicks + 1
     end
 end)
-autoLureButton:SetScript("PostClick", function(_, _, down)
+autoLureButton:SetScript("PostClick", function(self, _, down)
     clickDiagnostics.securePostClicks = clickDiagnostics.securePostClicks + 1
     local singleClick = EasyFishingDB.castClickMode == "SingleClick"
-    if (singleClick and not down) or (not singleClick and down) then ClearBinding() end
+    if (singleClick and not down) or (not singleClick and down) then
+        RememberAppliedLure(self)
+        ClearBinding()
+    end
 end)
 
 local function SetFishingPaused(value)
@@ -597,6 +646,7 @@ EF.SetFishingPaused = SetFishingPaused
 EF.ResetAccountSettings = ResetAccountSettings
 EF.CanStartFishing = CanStartFishing
 EF.GetLureStatus = GetLureStatus
+EF.GetFishingBonusStatus = GetFishingBonusStatus
 EF.GetMouseFishingStatus = GetMouseFishingStatus
 EF.GetClickDiagnostics = function()
     local legacyFocus = type(GetMouseFocus) == "function" and GetMouseFocus()

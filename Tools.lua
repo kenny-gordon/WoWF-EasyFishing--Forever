@@ -331,34 +331,60 @@ end
 function EF.InitializeFishingTools()
     local characterDB = EF.GetCharacterDB()
     local controls = CreateFrame("Frame", "EasyFishingControls", UIParent, "BackdropTemplate")
-    controls:SetSize(350, 96)
+    controls:SetSize(380, 108)
     controls:SetFrameStrata("MEDIUM")
     controls:SetClampedToScreen(true)
     controls:SetMovable(true)
     controls:EnableMouse(true)
     controls:RegisterForDrag("MiddleButton")
-    controls:SetPoint("CENTER", UIParent, "CENTER", characterDB.controlsX or 0, characterDB.controlsY or -220)
+    local fishWatcher = EF.FishWatcher
+    local controlsX, controlsY = tonumber(characterDB.controlsX) or 0, tonumber(characterDB.controlsY) or -220
+    local watcherX, watcherY = tonumber(characterDB.fishWatcherX) or 0, tonumber(characterDB.fishWatcherY) or 160
+    local controlsAtDefault = controlsX == 0 and controlsY == -220
+    local watcherAtDefault = watcherX == 0 and watcherY == 160
+    local dockX, dockY
+    if watcherAtDefault and not controlsAtDefault then
+        dockX, dockY = controlsX, controlsY
+    elseif controlsAtDefault and not watcherAtDefault then
+        dockX, dockY = watcherX, watcherY
+    else
+        dockX, dockY = (controlsX + watcherX) / 2, (controlsY + watcherY) / 2
+    end
+    controls:SetPoint("CENTER", UIParent, "CENTER", dockX, dockY)
+    fishWatcher:ClearAllPoints()
+    fishWatcher:SetPoint("BOTTOM", controls, "BOTTOM", 0, 0)
     controls:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16, edgeSize = 12,
         insets = { left = 3, right = 3, top = 3, bottom = 3 } })
     controls:SetBackdropColor(0, 0, 0, 0.9)
     controls:SetBackdropBorderColor(1, 1, 1, 1)
-    controls:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    controls:SetScript("OnDragStop", function(self)
+    local function StartDockMoving(self) self:StartMoving() end
+    local function SaveDockPosition(self)
         self:StopMovingOrSizing()
         local centerX, centerY = self:GetCenter()
         local parentX, parentY = UIParent:GetCenter()
+        if self == fishWatcher and EF.IsFishWatcherExpanded() then
+            centerY = centerY + (fishWatcher:GetHeight() - controls:GetHeight()) / 2
+        end
         characterDB.controlsX, characterDB.controlsY = centerX - parentX, centerY - parentY
-        self:ClearAllPoints()
-        self:SetPoint("CENTER", UIParent, "CENTER", characterDB.controlsX, characterDB.controlsY)
-    end)
+        characterDB.fishWatcherX, characterDB.fishWatcherY = characterDB.controlsX, characterDB.controlsY
+        controls:ClearAllPoints()
+        controls:SetPoint("CENTER", UIParent, "CENTER", characterDB.controlsX, characterDB.controlsY)
+        fishWatcher:ClearAllPoints()
+        fishWatcher:SetPoint("BOTTOM", controls, "BOTTOM", 0, 0)
+    end
+    controls:SetScript("OnDragStart", StartDockMoving)
+    controls:SetScript("OnDragStop", SaveDockPosition)
+    fishWatcher:SetScript("OnDragStart", StartDockMoving)
+    fishWatcher:SetScript("OnDragStop", SaveDockPosition)
+    _G.EasyFishingControls = controls
     SetTooltip(controls, "EasyFishing", "Middle-click and drag to move")
     local titleIcon = controls:CreateTexture(nil, "ARTWORK")
     titleIcon:SetSize(16, 16)
     titleIcon:SetPoint("TOPLEFT", controls, "TOPLEFT", 12, -10)
     titleIcon:SetTexture("Interface\\Icons\\Trade_Fishing")
     local title = AddText(controls, "GameFontNormal", 104, titleIcon, "TOPRIGHT", 6, 0)
-    title:SetText("EASYFISHING")
+    title:SetText("EasyFishing")
     local state = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     state:SetPoint("TOPRIGHT", controls, "TOPRIGHT", -12, -12)
     state:SetWidth(194)
@@ -375,26 +401,87 @@ function EF.InitializeFishingTools()
     lureText:SetWidth(132)
     lureText:SetJustifyH("RIGHT")
     lureText:SetWordWrap(false)
-    local pauseButton
-    for index, entry in ipairs({
-        { label = "Pause", tooltip = "Pause EasyFishing casts", action = function() EF.SetFishingPaused(not EF.IsFishingPaused()) end },
-        { label = "Toggle Gear", tooltip = "Swap fishing gear and previous gear", action = EF.ToggleFishingOutfit },
-        { label = "Open", tooltip = "Open fishing tools", action = function() EF.OpenWindow("home") end },
-    }) do
-        local button = CreateFrame("Button", nil, controls, "UIPanelButtonTemplate")
-        button:SetSize(102, 24)
-        button:SetPoint("BOTTOMLEFT", controls, "BOTTOMLEFT", 12 + (index - 1) * 112, 10)
-        button:SetText(entry.label)
-        button:SetScript("OnClick", entry.action)
-        SetTooltip(button, entry.label, entry.tooltip)
-        if index == 1 then pauseButton = button end
+    local latestCatchText = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    latestCatchText:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -24)
+    latestCatchText:SetWidth(356)
+    latestCatchText:SetWordWrap(false)
+    local autoExpandDismissed, sessionWasActive = false, false
+    local lastShowFishWatcher = EasyFishingDB.showFishWatcher
+    local function ToggleWatcherDetails()
+        if not EF.GetFishingSessionTime() then return end
+        if not EasyFishingDB.showFishWatcher then
+            EasyFishingDB.showFishWatcher = true
+            if EF.RefreshOptions then EF.RefreshOptions() end
+        end
+        local expanded = not EF.IsFishWatcherExpanded()
+        autoExpandDismissed = not expanded and EasyFishingDB.autoExpandFishWatcher or false
+        EF.SetFishWatcherExpanded(expanded)
+        if expanded then EF.UpdateFishWatcher() else EF.UpdateFishingControls() end
     end
+    local buttonWidths = { 80, 112, 68, 78 }
+    local function CreateDockButtons(parent, entries, bottomOffset)
+        local buttons, groupWidth = {}, 0
+        for index = 1, #entries do
+            groupWidth = groupWidth + buttonWidths[index]
+        end
+        groupWidth = groupWidth + (#entries - 1) * 6
+        local xOffset = (parent:GetWidth() - groupWidth) / 2
+        for index, entry in ipairs(entries) do
+            local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+            button:SetSize(buttonWidths[index], 22)
+            button:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", xOffset, bottomOffset)
+            button:SetText(entry.label)
+            button:SetScript("OnClick", entry.action)
+            SetTooltip(button, entry.label, entry.tooltip)
+            buttons[index] = button
+            xOffset = xOffset + buttonWidths[index] + 6
+        end
+        return buttons
+    end
+    local pauseAction = function() EF.SetFishingPaused(not EF.IsFishingPaused()) end
+    local openAction = function() EF.OpenWindow("home") end
+    local compactButtons = CreateDockButtons(controls, {
+        { label = "Pause", tooltip = "Pause EasyFishing casts", action = pauseAction },
+        { label = "Toggle Gear", tooltip = "Swap fishing gear and previous gear", action = EF.ToggleFishingOutfit },
+        { label = "Open", tooltip = "Open fishing tools", action = openAction },
+        { label = "Details", tooltip = "Expand session details", action = ToggleWatcherDetails },
+    }, 8)
+    local expandedButtons = CreateDockButtons(fishWatcher, {
+        { label = "Pause", tooltip = "Pause EasyFishing casts", action = pauseAction },
+        { label = "Toggle Gear", tooltip = "Swap fishing gear and previous gear", action = EF.ToggleFishingOutfit },
+        { label = "Open", tooltip = "Open fishing tools", action = openAction },
+        { label = "Compact", tooltip = "Return to compact controls", action = ToggleWatcherDetails },
+    }, 8)
+    local pauseButton, expandedPauseButton = compactButtons[1], expandedButtons[1]
+    local detailsButton = compactButtons[4]
     local broker, iconLibrary
     function EF.UpdateFishingControls()
         local toolWindow = _G.EasyFishingWindow
         local optionsWindow = (SettingsPanel and SettingsPanel:IsShown())
             or (InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown())
-        controls:SetShown(EasyFishingDB.showFishingControls
+        local hasSession = EF.GetFishingSessionTime() ~= nil
+        if not hasSession then
+            sessionWasActive = false
+            autoExpandDismissed = false
+            EF.SetFishWatcherExpanded(false)
+        elseif not sessionWasActive then
+            sessionWasActive = true
+            autoExpandDismissed = false
+            if EasyFishingDB.showFishWatcher and EasyFishingDB.autoExpandFishWatcher then
+                EF.SetFishWatcherExpanded(true)
+            end
+        elseif not EasyFishingDB.showFishWatcher then
+            EF.SetFishWatcherExpanded(false)
+        elseif not lastShowFishWatcher then
+            autoExpandDismissed = false
+            EF.SetFishWatcherExpanded(true)
+        elseif EasyFishingDB.autoExpandFishWatcher and not autoExpandDismissed then
+            EF.SetFishWatcherExpanded(true)
+        end
+        lastShowFishWatcher = EasyFishingDB.showFishWatcher
+        local watcherVisible = hasSession and EasyFishingDB.showFishWatcher and EF.IsFishWatcherExpanded()
+        fishWatcher:SetShown(watcherVisible)
+        controls:SetShown(not watcherVisible and EasyFishingDB.showFishingControls
             and not (toolWindow and toolWindow:IsShown()) and not optionsWindow)
         local status = FishingState()
         state:SetText(status)
@@ -407,6 +494,8 @@ function EF.InitializeFishingTools()
             state:SetTextColor(1, 0.82, 0)
         end
         pauseButton:SetText(EF.IsFishingPaused() and "Resume" or "Pause")
+        expandedPauseButton:SetText(EF.IsFishingPaused() and "Resume" or "Pause")
+        detailsButton:SetEnabled(hasSession and EasyFishingDB.showFishWatcher)
         local lure = EF.GetLureStatus()
         if not EF.IsFishingPoleEquipped() then
             enchantText:SetText("Equip a fishing pole")
@@ -417,6 +506,9 @@ function EF.InitializeFishingTools()
             enchantText:SetText("Pole enchant  None")
         end
         lureText:SetText(string.format("Eligible lures  %d", lure.count))
+        local catchName, catchCount = EF.GetFishingSessionLatestCatch()
+        latestCatchText:SetText(catchName and string.format("Latest: %s  x%d", catchName, catchCount or 0)
+            or "Latest: No catch this session")
         if broker then broker.text = status end
     end
     local toolWindow = _G.EasyFishingWindow

@@ -23,6 +23,7 @@ Addon = {}
 Frames, NamedFrames, Timers, Messages = {}, {}, {}, {}
 Clock, Skill, Zone, Combat, Moving = 10, 100, 'Zone A', false, 0
 Counts = {[6529]=2, [6533]=1}
+EquippedItems = {}
 CVars = {Sound_EnableAllSound='0',Sound_EnableSFX='0', Sound_EnableSoundWhenGameIsInBG='0', autointeract='1'}
 local methods = {}
 local childFields = {Text=true, Low=true, High=true, ScrollBar=true}
@@ -115,6 +116,7 @@ for _, key in ipairs({
     'UpdateScrollChildRect','SetFocus','HighlightText','SetValue',
     'SetMinMaxValues','SetValueStep','Raise','AddLine','SetHighlightTexture','SetHyperlink','SetDisabledFontObject'
 }) do methods[key] = function() end end
+function methods:SetClampedToScreen(value) self.clampedToScreen=value end
 UIParent = CreateFrame('Frame'); UIParent:SetSize(1280,720)
 WorldFrame = CreateFrame('Frame'); GameTooltip = CreateFrame('Frame')
 WorldMapFrame = CreateFrame('Frame')
@@ -146,7 +148,10 @@ function GetTime() return Clock end
 function GetCursorPosition() return 500,500 end
 math.atan2=math.atan
 function InCombatLockdown() return Combat end
-function GetInventoryItemID() return PoleEquipped~=false and 6256 or nil end
+function GetInventoryItemID(_,slot)
+    if slot==16 then return PoleEquipped~=false and (EquippedItems[16] or 6256) or nil end
+    return EquippedItems[slot]
+end
 function GetItemInfoInstant(id) assert(id~=nil); return 6256,'Pole',nil,nil,123,2,20 end
 function GetItemInfo(id) return 'Item '..id,'|Hitem:'..id..':0|h[Item]|h' end
 function GetItemCount(id) return Counts[id] or 0 end
@@ -281,6 +286,22 @@ assert(RegisteredSettings and #UISpecialFrames==2)
 assert(NamedFrames.EasyFishingWindow.backdrop.bgFile=='Interface\\DialogFrame\\UI-DialogBox-Background')
 assert(NamedFrames.EasyFishingWindow.backdrop.edgeFile=='Interface\\DialogFrame\\UI-DialogBox-Border')
 assert(NamedFrames.EasyFishingWindow.backdropColor[1]==1 and NamedFrames.EasyFishingWindow.backdropColor[4]==1)
+local navigationButtons={}
+local gearTab
+for _,frame in ipairs(Frames) do
+    if frame.kind=='Button' and frame.parent==NamedFrames.EasyFishingWindow
+        and frame.point and frame.point[1]=='TOPLEFT' and frame.point[5]==-48 then
+        table.insert(navigationButtons,frame)
+        if frame.text=='Gear & Rewards' then gearTab=frame end
+    end
+end
+table.sort(navigationButtons,function(first,second) return first.point[4]<second.point[4] end)
+assert(#navigationButtons==6 and gearTab and gearTab.width==132
+    and gearTab.fontString.width==120, 'the full Gear & Rewards tab label must fit')
+for index=1,#navigationButtons-1 do
+    assert(navigationButtons[index].point[4]+navigationButtons[index].width
+        <=navigationButtons[index+1].point[4], 'main navigation tabs must not overlap')
+end
 assert(NamedFrames.EasyFishingResetHistoryButton and NamedFrames.EasyFishingResetSettingsButton)
 assert(NamedFrames.EasyFishingAtlasScrollFrame.width==620)
 assert(NamedFrames.EasyFishingTrainerScrollFrame.width==620)
@@ -288,7 +309,7 @@ assert(NamedFrames.EasyFishingQuestRewardsScroll.width==300)
 assert(NamedFrames.EasyFishingAtlasScrollFrame.scrollChild.width==600)
 assert(NamedFrames.EasyFishingTrainerScrollFrame.scrollChild.width==600)
 for _,key in ipairs({'enableDoubleClick','enableAutoLure','preferStrongestLure','enableSound',
-    'showFishWatcher','showFishingControls','showMinimapButton','disableClickToMoveWhileFishing'}) do
+    'showFishWatcher','autoExpandFishWatcher','showFishingControls','showMinimapButton','disableClickToMoveWhileFishing'}) do
     local checkbox=NamedFrames['EasyFishingCB_'..key]; local previous=checkbox:GetChecked()
     checkbox:SetChecked(not previous); checkbox.scripts.OnClick(checkbox)
     assert(EasyFishingDB[key]==not previous)
@@ -436,11 +457,13 @@ for _,command in ipairs({'','stats','locations','journal','guide','npcs','gear',
 end
 assert(OpenedSettings)
 assert(NamedFrames.EasyFishingControls)
-assert(NamedFrames.EasyFishingControls.width==350 and NamedFrames.EasyFishingControls.height==96)
+assert(NamedFrames.EasyFishingControls.width==380 and NamedFrames.EasyFishingControls.height==108)
 assert(NamedFrames.EasyFishingControls.text=='')
+assert(NamedFrames.EasyFishingWatcherTitle.text=='EasyFishing')
 local controlTitle,controlState,controlEnchant,controlLure
 for _,frame in ipairs(Frames) do
-    if frame.kind=='FontString' and frame.text=='EASYFISHING' then controlTitle=frame end
+    if frame.kind=='FontString' and frame.text=='EasyFishing'
+        and frame.parent==NamedFrames.EasyFishingControls then controlTitle=frame end
     if frame.kind=='FontString' and frame.parent==NamedFrames.EasyFishingControls then
         if frame.width==194 then controlState=frame end
         if frame.width==190 then controlEnchant=frame end
@@ -454,6 +477,34 @@ assert(controlState.text=='Double-click Left Mouse' and controlEnchant.text=='Po
     and controlLure.text=='Eligible lures  3')
 assert(controlState.point[1]=='TOPRIGHT' and controlState.point[2]==NamedFrames.EasyFishingControls)
 assert(controlLure.point[1]=='TOPRIGHT' and controlLure.point[2]==NamedFrames.EasyFishingControls)
+local function AssertCenteredDockButtons(parent)
+    local buttons={}
+    for _,frame in ipairs(Frames) do
+        if frame.kind=='Button' and frame.parent==parent and frame.point
+            and frame.point[1]=='BOTTOMLEFT' then
+            table.insert(buttons,frame)
+        end
+    end
+    table.sort(buttons,function(first,second) return first.point[4]<second.point[4] end)
+    assert(#buttons==4)
+    assert(math.abs(buttons[1].point[4]-(parent.width-(buttons[1].width+buttons[2].width
+        +buttons[3].width+buttons[4].width+18))/2)<0.001)
+    assert(math.abs(buttons[4].point[4]+buttons[4].width
+        -(parent.width-(buttons[1].point[4])))<0.001)
+    for index=1,#buttons-1 do
+        assert(buttons[index].point[4]+buttons[index].width+6==buttons[index+1].point[4])
+    end
+end
+AssertCenteredDockButtons(NamedFrames.EasyFishingControls)
+AssertCenteredDockButtons(NamedFrames.EasyFishingFishWatcher)
+assert(NamedFrames.EasyFishingFishWatcher.point[1]=='BOTTOM'
+    and NamedFrames.EasyFishingFishWatcher.point[2]==NamedFrames.EasyFishingControls
+    and NamedFrames.EasyFishingFishWatcher.point[3]=='BOTTOM',
+    'expanded view shares the dock bottom edge')
+NamedFrames.EasyFishingControls.scripts.OnDragStart(NamedFrames.EasyFishingControls)
+NamedFrames.EasyFishingControls.scripts.OnDragStop(NamedFrames.EasyFishingControls)
+assert(EasyFishingCharDB.controlsX==EasyFishingCharDB.fishWatcherX
+    and EasyFishingCharDB.controlsY==EasyFishingCharDB.fishWatcherY)
 Addon.OpenWindow('home'); assert(not NamedFrames.EasyFishingControls.shown)
 NamedFrames.EasyFishingWindow:Hide(); assert(NamedFrames.EasyFishingControls.shown)
 assert(Addon.GetMouseFishingStatus():find('double-click Left Mouse',1,true))
@@ -591,6 +642,19 @@ Addon.ToggleFishingOutfit(); assert(equipped==1 and Addon.GetCharacterDB().previ
 Combat=true; Addon.ToggleFishingOutfit(); assert(equipped==1); Combat=false
 Channel='Other spell'; Emit('UNIT_SPELLCAST_CHANNEL_START','player')
 assert(Addon.EnsureFishingStats().totalCasts==0)
+EquippedItems={[16]=6365,[1]=19972,[8]=19969}
+Addon.BindCastAction('LeftButton')
+NamedFrames.EasyFishingAutoLureButton.scripts.PostClick(
+    NamedFrames.EasyFishingAutoLureButton,'LeftButton',true)
+Enchanted=true
+local recognizedGearBonus, activeLureBonus, activeLureName=Addon.GetFishingBonusStatus()
+local appliedLureID=tonumber((NamedFrames.EasyFishingAutoLureButton.item or ''):match('item:(%d+)'))
+local appliedLure
+for _,lure in ipairs(Addon.Data.LURES) do if lure.id==appliedLureID then appliedLure=lure end end
+assert(recognizedGearBonus==15 and appliedLure
+    and activeLureBonus==appliedLure.bonus and activeLureName==appliedLure.name)
+Addon.OpenWindow('home')
+NamedFrames.EasyFishingWindow:Hide()
 Cast()
 local sessionZone,seconds=Addon.GetFishingSessionTime()
 assert(sessionZone=='Zone A' and math.abs(seconds-10)<0.0001)
@@ -599,8 +663,30 @@ assert(CVars.Sound_EnableAllSound=='0')
 Emit('LOOT_READY'); Emit('LOOT_OPENED'); Emit('LOOT_OPENED'); Emit('LOOT_CLOSED')
 assert(Addon.EnsureFishingStats().totalItems==2)
 assert(Addon.EnsureFishingStats().successfulCasts==1)
-assert(Addon.FishWatcher.width==380 and Addon.FishWatcher.height==260)
-assert(NamedFrames.EasyFishingWatcherLatest.itemID==6291)
+assert(NamedFrames.EasyFishingWatcherSummary.justifyH=='CENTER'
+    and NamedFrames.EasyFishingWatcherSummary.text:find('Session ',1,true)
+    and NamedFrames.EasyFishingWatcherSummary.text:find('Zone ',1,true)
+    and NamedFrames.EasyFishingWatcherSummary.text:find('/h',1,true)
+    and NamedFrames.EasyFishingWatcherSummary.text:find('Gear +15',1,true)
+    and NamedFrames.EasyFishingWatcherSummary.text:find('Lure +'..activeLureBonus,1,true),
+    'expanded session summary centers counts, rate and fishing bonuses on one line')
+assert(not Addon.FishWatcher:IsShown() and NamedFrames.EasyFishingControls:IsShown(),
+    string.format('compact dock visibility: watcher=%s controls=%s enabled=%s window=%s options=%s expanded=%s',
+        tostring(Addon.FishWatcher:IsShown()), tostring(NamedFrames.EasyFishingControls:IsShown()),
+        tostring(EasyFishingDB.showFishingControls), tostring(NamedFrames.EasyFishingWindow:IsShown()),
+        tostring((SettingsPanel or InterfaceOptionsFrame):IsShown()), tostring(Addon.IsFishWatcherExpanded())))
+FindButton('Details').scripts.OnClick()
+assert(Addon.IsFishWatcherExpanded() and Addon.FishWatcher:IsShown()
+    and not NamedFrames.EasyFishingControls:IsShown())
+assert(Addon.FishWatcher.width==380 and Addon.FishWatcher.height==280)
+assert((NamedFrames.EasyFishingWatcherLatestLabel.point[2].point[4] or 0)==0,
+    'expanded session details start directly below the shared header')
+assert(not Addon.FishWatcher.clampedToScreen,
+    'expanded details must not be clamped away from the compact button-row anchor')
+assert(NamedFrames.EasyFishingWatcherLatest.itemID==6291,
+    'latest row ID='..tostring(NamedFrames.EasyFishingWatcherLatest.itemID)
+        ..' saved ID='..tostring(Addon.EnsureFishingStats().lastCatchItemID)
+        ..' watcher='..tostring(EasyFishingDB.showFishWatcher))
 assert(NamedFrames.EasyFishingWatcherLatestLabel.justifyH=='CENTER')
 assert(NamedFrames.EasyFishingWatcherLatest.text.text=='Fish  x2')
 assert(NamedFrames.EasyFishingWatcherLatest.count.text=='')
@@ -618,10 +704,15 @@ for _,frame in ipairs(Frames) do
     if frame.rank then assert(frame.height>=frame.detail:GetStringHeight()+28) end
 end
 TallDescriptions=false; SlashCmdList.EASYFISHING('journal')
-NamedFrames.EasyFishingWatcherClose.scripts.OnClick()
-assert(not Addon.FishWatcher.shown and not EasyFishingDB.showFishWatcher)
+FindButton('Compact').scripts.OnClick()
+assert(not Addon.FishWatcher.shown and EasyFishingDB.showFishWatcher)
+FindButton('Details').scripts.OnClick()
+assert(Addon.IsFishWatcherExpanded() and Addon.FishWatcher:IsShown())
+local showDetailsCheckbox=NamedFrames.EasyFishingCB_showFishWatcher
+showDetailsCheckbox:SetChecked(false); showDetailsCheckbox.scripts.OnClick(showDetailsCheckbox)
+assert(not Addon.FishWatcher:IsShown() and not EasyFishingDB.showFishWatcher)
 assert(not NamedFrames.EasyFishingCB_showFishWatcher:GetChecked())
-SlashCmdList.EASYFISHING('watch'); assert(Addon.FishWatcher.shown)
+SlashCmdList.EASYFISHING('watch'); assert(Addon.FishWatcher.shown and Addon.IsFishWatcherExpanded())
 assert(NamedFrames.EasyFishingCB_showFishWatcher:GetChecked())
 local journal=Addon.GetFishJournal()
 assert(#journal==1 and journal[1].id=='6291' and journal[1].count==2)
@@ -748,7 +839,9 @@ C_Map.GetWorldPosFromMapPos=nil
 local key,existing=Addon.FindFishingSpot(zoneStats,1438,0.503,0.5)
 assert(existing, 'exact-coordinate matching works without world-distance API')
 C_Map.GetWorldPosFromMapPos=oldWorldAPI
+    EasyFishingDB.autoExpandFishWatcher=true
 Zone='Zone B'; Cast(); Emit('LOOT_OPENED'); Emit('LOOT_CLOSED')
+assert(Addon.IsFishWatcherExpanded(), 'auto-expand opens details for a new fishing session')
 Emit('PLAYER_STARTED_MOVING')
 assert(Addon.FishWatcher:IsShown(), 'movement keeps the watcher visible during the idle grace period')
 local movementEndTimer=Timers[#Timers]

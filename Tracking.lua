@@ -14,9 +14,11 @@ local isFishing = false
 
 local fishingSession = nil
 local fishingSessionEndTimer = nil
+local fishWatcherExpanded = false
+local SetFishWatcherExpanded
 
 local fishWatcher = CreateFrame("Frame", "EasyFishingFishWatcher", UIParent, "BackdropTemplate")
-fishWatcher:SetSize(380, 260)
+fishWatcher:SetSize(380, 108)
 fishWatcher:SetFrameStrata("MEDIUM")
 fishWatcher:SetClampedToScreen(true)
 fishWatcher:SetMovable(true)
@@ -39,53 +41,53 @@ local fishWatcherIcon = fishWatcher:CreateTexture(nil, "ARTWORK")
 fishWatcherIcon:SetSize(16, 16)
 fishWatcherIcon:SetPoint("TOPLEFT", 12, -10)
 fishWatcherIcon:SetTexture("Interface\\Icons\\Trade_Fishing")
-local fishWatcherTitle = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+local fishWatcherTitle = fishWatcher:CreateFontString("EasyFishingWatcherTitle", "OVERLAY", "GameFontNormal")
 fishWatcherTitle:SetPoint("LEFT", fishWatcherIcon, "RIGHT", 6, 0)
 fishWatcherTitle:SetWidth(130)
 fishWatcherTitle:SetJustifyH("LEFT")
-fishWatcherTitle:SetText("Fish Watcher")
+fishWatcherTitle:SetText("EasyFishing")
 
 local fishWatcherStatus = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 fishWatcherStatus:SetPoint("TOPRIGHT", fishWatcher, "TOPRIGHT", -34, -12)
 fishWatcherStatus:SetWidth(130)
 fishWatcherStatus:SetJustifyH("RIGHT")
-local watcherClose = CreateFrame("Button", "EasyFishingWatcherClose", fishWatcher, "UIPanelCloseButton")
-watcherClose:SetSize(24, 24)
-watcherClose:SetPoint("TOPRIGHT", -4, -4)
-watcherClose:SetScript("OnClick", function()
-    EasyFishingDB.showFishWatcher = false
-    fishWatcher:Hide()
-    if EF.RefreshOptions then EF.RefreshOptions() end
-end)
-watcherClose:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Hide Fish Watcher")
-    GameTooltip:Show()
-end)
-watcherClose:SetScript("OnLeave", function() GameTooltip:Hide() end)
+local fishWatcherDetails = CreateFrame("Frame", nil, fishWatcher)
+fishWatcherDetails:SetSize(380, 260)
+fishWatcherDetails:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT")
+fishWatcherDetails:Hide()
+SetFishWatcherExpanded = function(expanded)
+    fishWatcherExpanded = not not (expanded and fishingSession and EasyFishingDB
+        and EasyFishingDB.showFishWatcher)
+    fishWatcherDetails:SetShown(fishWatcherExpanded)
+    fishWatcher:SetClampedToScreen(not fishWatcherExpanded)
+    fishWatcher:SetHeight(fishWatcherExpanded and 280 or 108)
+    return fishWatcherExpanded
+end
+EF.SetFishWatcherExpanded = SetFishWatcherExpanded
+EF.IsFishWatcherExpanded = function() return fishWatcherExpanded end
 
-local fishWatcherZone = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherZone:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -32)
+local fishWatcherZone = fishWatcherDetails:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+fishWatcherZone:SetPoint("TOPLEFT", fishWatcherDetails, "TOPLEFT", 12, -32)
 fishWatcherZone:SetWidth(356)
 fishWatcherZone:SetJustifyH("LEFT")
 fishWatcherZone:SetWordWrap(false)
 
-local fishWatcherDivider = fishWatcher:CreateTexture(nil, "ARTWORK")
+local fishWatcherDivider = fishWatcherDetails:CreateTexture(nil, "ARTWORK")
 fishWatcherDivider:SetColorTexture(0.55, 0.55, 0.55, 0.5)
 fishWatcherDivider:SetSize(356, 1)
-fishWatcherDivider:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -52)
+fishWatcherDivider:SetPoint("TOPLEFT", fishWatcherDetails, "TOPLEFT", 12, -52)
 
 local fishWatcherMetricValues = {}
 local metricNames = { "Skill", "Time", "Casts", "Skill Gains" }
 for index, metricName in ipairs(metricNames) do
     local xOffset = (index - 1) * 89
-    local label = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local label = fishWatcherDetails:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     label:SetPoint("TOPLEFT", fishWatcherDivider, "BOTTOMLEFT", xOffset, -8)
     label:SetWidth(83)
     label:SetJustifyH("LEFT")
     label:SetText(metricName)
 
-    local value = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local value = fishWatcherDetails:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
     value:SetWidth(83)
     value:SetWordWrap(false)
@@ -94,28 +96,24 @@ for index, metricName in ipairs(metricNames) do
     fishWatcherMetricValues[index] = value
 end
 
-local fishWatcherSummary = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherSummary:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -98)
+local fishWatcherSummary = fishWatcherDetails:CreateFontString(
+    "EasyFishingWatcherSummary", "OVERLAY", "GameFontHighlightSmall")
+fishWatcherSummary:SetPoint("TOPLEFT", fishWatcherDetails, "TOPLEFT", 12, -106)
 fishWatcherSummary:SetWidth(356)
-fishWatcherSummary:SetJustifyH("LEFT")
+fishWatcherSummary:SetJustifyH("CENTER")
 fishWatcherSummary:SetWordWrap(false)
-local fishWatcherRate = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-fishWatcherRate:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -114)
-fishWatcherRate:SetWidth(356)
-fishWatcherRate:SetJustifyH("LEFT")
-fishWatcherRate:SetWordWrap(false)
 
-local fishWatcherLastCatchLabel = fishWatcher:CreateFontString(
+local fishWatcherLastCatchLabel = fishWatcherDetails:CreateFontString(
     "EasyFishingWatcherLatestLabel", "OVERLAY", "GameFontDisableSmall")
-fishWatcherLastCatchLabel:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -136)
+fishWatcherLastCatchLabel:SetPoint("TOPLEFT", fishWatcherDetails, "TOPLEFT", 12, -136)
 fishWatcherLastCatchLabel:SetWidth(356)
 fishWatcherLastCatchLabel:SetJustifyH("CENTER")
 fishWatcherLastCatchLabel:SetText("Latest Catch")
 
 local function CreateWatcherCatchRow(name, yOffset)
-    local row = CreateFrame("Button", name, fishWatcher)
+    local row = CreateFrame("Button", name, fishWatcherDetails)
     row:SetSize(356, 22)
-    row:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, yOffset)
+    row:SetPoint("TOPLEFT", fishWatcherDetails, "TOPLEFT", 12, yOffset)
     row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
     row.icon = row:CreateTexture(nil, "ARTWORK")
     row.icon:SetSize(20, 20)
@@ -166,8 +164,8 @@ local function SetWatcherCatch(row, itemID, itemLink, name, count, inlineCount)
 end
 local fishWatcherLastCatch = CreateWatcherCatchRow("EasyFishingWatcherLatest", -152)
 
-local fishWatcherBreakdownLabel = fishWatcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-fishWatcherBreakdownLabel:SetPoint("TOPLEFT", fishWatcher, "TOPLEFT", 12, -184)
+local fishWatcherBreakdownLabel = fishWatcherDetails:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+fishWatcherBreakdownLabel:SetPoint("TOPLEFT", fishWatcherDetails, "TOPLEFT", 12, -184)
 fishWatcherBreakdownLabel:SetWidth(356)
 fishWatcherBreakdownLabel:SetText("Session Catches")
 local fishWatcherCatchRows = {
@@ -428,7 +426,9 @@ end
 
 local function UpdateFishWatcher()
     if not fishingSession or not EasyFishingDB or not EasyFishingDB.showFishWatcher then
+        fishWatcherDetails:Hide()
         fishWatcher:Hide()
+        if EF.UpdateFishingControls then EF.UpdateFishingControls() end
         return
     end
 
@@ -448,9 +448,11 @@ local function UpdateFishWatcher()
     fishWatcherMetricValues[2]:SetText(FormatFishingTime(elapsedSeconds))
     fishWatcherMetricValues[3]:SetText(tostring(fishingSession.casts))
     fishWatcherMetricValues[4]:SetText(tostring(fishingSession.skillUps))
-    fishWatcherSummary:SetText(string.format(
-        "Session: %d items  |  Zone: %d items", fishingSession.totalItems, zoneItems))
-    fishWatcherRate:SetText(string.format("%.1f items per hour", itemsPerHour))
+    local gearBonus, activeLureBonus = EF.GetFishingBonusStatus()
+    local lureBonusText = EF.GetLureStatus().active
+        and (activeLureBonus and ("Lure +" .. activeLureBonus) or "Lure ?") or "Lure +0"
+    fishWatcherSummary:SetText(string.format("Session %d  |  Zone %d  |  %.1f/h  |  Gear +%d  |  %s",
+        fishingSession.totalItems, zoneItems, itemsPerHour, gearBonus, lureBonusText))
     SetWatcherCatch(fishWatcherLastCatch, fishingSession.lastCatchItemID,
         fishingSession.lastCatchItemLink, fishingSession.lastCatch, fishingSession.lastCatchQuantity, true)
     local sessionItems = {}
@@ -470,7 +472,8 @@ local function UpdateFishWatcher()
         SetWatcherCatch(row, item and item.id, item and item.link, item and item.name, item and item.count)
         row:SetShown(item ~= nil or index == 1)
     end
-    fishWatcher:Show()
+    fishWatcherDetails:Show()
+    if EF.UpdateFishingControls then EF.UpdateFishingControls() else fishWatcher:Show() end
 end
 
 local function EndFishingSession()
@@ -487,7 +490,9 @@ local function EndFishingSession()
         zoneStats.fishingSeconds = zoneStats.fishingSeconds + duration
     end
     fishingSession = nil
-    fishWatcher:Hide()
+    SetFishWatcherExpanded(false)
+    fishWatcherDetails:Hide()
+    if EF.UpdateFishingControls then EF.UpdateFishingControls() else fishWatcher:Hide() end
 end
 
 local function ResetFishingHistory()
@@ -655,7 +660,7 @@ end
 
 fishWatcher:SetScript("OnUpdate", function(self, elapsed)
     self.updateElapsed = (self.updateElapsed or 0) + elapsed
-    if self.updateElapsed >= 1 then
+    if fishWatcherExpanded and self.updateElapsed >= 1 then
         self.updateElapsed = 0
         UpdateFishWatcher()
     end
@@ -788,3 +793,7 @@ EF.ResetFishingHistory = ResetFishingHistory
 EF.GetFishingSessionTime = GetFishingSessionTime
 EF.UpdateFishingSoundSettings = UpdateFishingSoundSettings
 EF.RestoreFishingSoundSettings = RestoreFishingSoundSettings
+EF.GetFishingSessionLatestCatch = function()
+    if not fishingSession then return nil end
+    return fishingSession.lastCatch, fishingSession.lastCatchQuantity
+end
